@@ -21,6 +21,7 @@
 #include "cli/serial_cli.h"
 #include "proxy/http_proxy.h"
 #include "wecom/wecom_bot.h"
+#include "media/media_driver.h"
 #include "tools/tool_registry.h"
 #include "cron/cron_service.h"
 #include "heartbeat/heartbeat.h"
@@ -118,6 +119,8 @@ static void outbound_dispatch_task(void *arg)
 
 void app_main(void)
 {
+    /* Reduce noisy IMU logs during CLI input */
+    esp_log_level_set("imu", ESP_LOG_WARN);
     /* Silence noisy components */
     esp_log_level_set("esp-x509-crt-bundle", ESP_LOG_WARN);
 
@@ -144,6 +147,7 @@ void app_main(void)
     /* Initialize subsystems */
     ESP_ERROR_CHECK(message_bus_init());
     ESP_ERROR_CHECK(memory_store_init());
+    ESP_ERROR_CHECK(media_init());
     ESP_ERROR_CHECK(skill_loader_init());
     ESP_ERROR_CHECK(session_mgr_init());
     ESP_ERROR_CHECK(wifi_manager_init());

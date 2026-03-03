@@ -76,6 +76,14 @@
 #define MIMI_ZHIPU_CODING_API_URL    "https://open.bigmodel.cn/api/coding/paas/v4/chat/completions"
 #define MIMI_ZHIPU_CODING_API_HOST   "open.bigmodel.cn"
 #define MIMI_ZHIPU_CODING_API_PATH   "/api/coding/paas/v4/chat/completions"
+#define MIMI_ZHIPU_API_URL           "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+#define MIMI_ZHIPU_API_HOST          "open.bigmodel.cn"
+#define MIMI_ZHIPU_API_PATH          "/api/paas/v4/chat/completions"
+#define MIMI_ZHIPU_ASR_URL           "https://open.bigmodel.cn/api/paas/v4/audio/transcriptions"
+#define MIMI_ZHIPU_ASR_HOST          "open.bigmodel.cn"
+#define MIMI_ZHIPU_ASR_PATH          "/api/paas/v4/audio/transcriptions"
+#define MIMI_ZHIPU_ASR_MODEL         "glm-asr-2512"
+#define MIMI_ZHIPU_VISION_MODEL      "glm-4.6v"
 #define MIMI_LLM_API_VERSION         "2023-06-01"
 #define MIMI_LLM_STREAM_BUF_SIZE     (32 * 1024)
 #define MIMI_LLM_LOG_VERBOSE_PAYLOAD 0

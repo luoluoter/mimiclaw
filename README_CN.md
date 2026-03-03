@@ -182,6 +182,21 @@ MimiClaw 会在和 WebSocket 同一端口提供内置网页：
 - 同一个 `spiffs_data/www/index.html` 也可以放到任意静态站点上使用，连接设备 IP 即可。
 - 页面内置 Benchmark 面板（仅 WebSocket 模式可用）。
 
+### 多模态工具（摄像头 / 麦克风）
+
+MimiClaw 提供多模态工具并接入智谱 API：
+
+- `camera_capture` → 保存图片到 SPIFFS
+- `vision_analyze` → 发送图片到智谱多模态 API
+- `audio_record` → 录音保存到 SPIFFS
+- `audio_transcribe` → 发送音频到智谱 ASR API
+
+采集层已做模块解耦，默认会提示 “not supported”，后续可注册不同硬件驱动逐步接入。
+
+针对 XIAO ESP32S3 Sense，已提供参考驱动（OV2640 + PDM 麦克风），引脚定义在 `main/media/xiao_s3_media.c`。
+部分批次可能使用 OV3660 传感器，启动时会打印传感器 PID 便于核对。
+该驱动依赖 `espressif/esp32-camera` 组件，构建时会通过 IDF 组件管理器自动拉取。
+
 ### CLI 命令（通过 UART/COM 口连接）
 
 通过串口连接即可配置和调试。**配置命令**让你无需重新编译就能修改设置 — 随时随地插上 USB 线就能改。

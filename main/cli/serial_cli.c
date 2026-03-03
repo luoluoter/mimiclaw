@@ -647,6 +647,8 @@ esp_err_t serial_cli_init(void)
     esp_console_repl_config_t repl_config = ESP_CONSOLE_REPL_CONFIG_DEFAULT();
     repl_config.prompt = "mimi> ";
     repl_config.max_cmdline_length = 256;
+    /* Tool execution can be heavy (HTTP + JSON), give the REPL more stack. */
+    repl_config.task_stack_size = 12 * 1024;
 
 #if CONFIG_ESP_CONSOLE_UART_DEFAULT || CONFIG_ESP_CONSOLE_UART_CUSTOM
     esp_console_dev_uart_config_t hw_config = ESP_CONSOLE_DEV_UART_CONFIG_DEFAULT();

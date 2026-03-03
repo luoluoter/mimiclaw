@@ -11,6 +11,9 @@ idf_component_register(
         "telegram/telegram_bot.c"
         "llm/llm_proxy.c"
         "bench/bench.c"
+        "media/media_driver.c"
+        "media/xiao_s3_media.c"
+        "tools/tool_media.c"
         "wecom/wecom_bot.c"
         "agent/agent_loop.c"
         "agent/context_builder.c"
@@ -32,5 +35,5 @@ idf_component_register(
     REQUIRES
         nvs_flash esp_wifi esp_netif esp_http_client esp_http_server
         esp_https_ota esp_event json spiffs console vfs app_update esp-tls
-        driver esp_timer
+        driver esp_timer esp_psram
 )

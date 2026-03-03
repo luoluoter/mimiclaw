@@ -167,6 +167,21 @@ MimiClaw serves a built-in UI over HTTP on the same port as the WebSocket server
 - The same `spiffs_data/www/index.html` can be hosted on any static server and pointed to your device IP.
 - The UI includes a Benchmark panel (WebSocket mode only).
 
+### Multimodal Tools (Camera / Mic)
+
+MimiClaw exposes multimodal tools that integrate with Zhipu's APIs:
+
+- `camera_capture` → saves an image to SPIFFS
+- `vision_analyze` → sends image to Zhipu multimodal API
+- `audio_record` → records audio to SPIFFS
+- `audio_transcribe` → sends audio to Zhipu ASR API
+
+Hardware capture is decoupled behind a media driver. By default, capture returns "not supported" until a hardware driver is registered.
+
+On XIAO ESP32S3 Sense, a reference driver is included (OV2640 + PDM mic) based on the board pinout. Camera pins and PDM pins are defined in `main/media/xiao_s3_media.c`.
+Some board batches may use OV3660 instead of OV2640; the driver logs the sensor PID at boot for verification.
+This driver depends on the `espressif/esp32-camera` component and will be pulled via the IDF Component Manager on build.
+
 ### CLI Commands (via UART/COM port)
 
 Connect via serial to configure or debug. **Config commands** let you change settings without recompiling — just plug in a USB cable anywhere.

@@ -4,6 +4,7 @@
 #include "tools/tool_get_time.h"
 #include "tools/tool_files.h"
 #include "tools/tool_cron.h"
+#include "tools/tool_media.h"
 
 #include <string.h>
 #include "esp_log.h"
@@ -11,7 +12,7 @@
 
 static const char *TAG = "tools";
 
-#define MAX_TOOLS 12
+#define MAX_TOOLS 20
 
 static mimi_tool_t s_tools[MAX_TOOLS];
 static int s_tool_count = 0;
@@ -57,6 +58,7 @@ esp_err_t tool_registry_init(void)
 
     /* Register web_search */
     tool_web_search_init();
+    tool_media_init();
 
     mimi_tool_t ws = {
         .name = "web_search",
@@ -175,6 +177,59 @@ esp_err_t tool_registry_init(void)
         .execute = tool_cron_remove_execute,
     };
     register_tool(&cr);
+
+    /* Register camera_capture */
+    mimi_tool_t cc = {
+        .name = "camera_capture",
+        .description = "Capture a photo from the camera and save it to SPIFFS.",
+        .input_schema_json =
+            "{\"type\":\"object\","
+            "\"properties\":{\"path\":{\"type\":\"string\",\"description\":\"Optional output path (SPIFFS). Default: " MIMI_SPIFFS_BASE "/media/cam.jpg\"}},"
+            "\"required\":[]}",
+        .execute = tool_camera_capture_execute,
+    };
+    register_tool(&cc);
+
+    /* Register audio_record */
+    mimi_tool_t ar = {
+        .name = "audio_record",
+        .description = "Record audio from the microphone and save it to SPIFFS.",
+        .input_schema_json =
+            "{\"type\":\"object\","
+            "\"properties\":{\"duration_ms\":{\"type\":\"integer\",\"description\":\"Record duration in milliseconds (default 3000)\"},"
+            "\"path\":{\"type\":\"string\",\"description\":\"Optional output path (SPIFFS). Default: " MIMI_SPIFFS_BASE "/media/audio.wav\"}},"
+            "\"required\":[]}",
+        .execute = tool_audio_record_execute,
+    };
+    register_tool(&ar);
+
+    /* Register vision_analyze */
+    mimi_tool_t va = {
+        .name = "vision_analyze",
+        .description = "Analyze an image using Zhipu multimodal API. Provide either a local path or a URL.",
+        .input_schema_json =
+            "{\"type\":\"object\","
+            "\"properties\":{\"path\":{\"type\":\"string\",\"description\":\"Local SPIFFS image path\"},"
+            "\"url\":{\"type\":\"string\",\"description\":\"Public image URL or data URL\"},"
+            "\"prompt\":{\"type\":\"string\",\"description\":\"Instruction for the vision model\"},"
+            "\"model\":{\"type\":\"string\",\"description\":\"Override vision model (default: " MIMI_ZHIPU_VISION_MODEL ")\"}},"
+            "\"required\":[]}",
+        .execute = tool_vision_analyze_execute,
+    };
+    register_tool(&va);
+
+    /* Register audio_transcribe */
+    mimi_tool_t at = {
+        .name = "audio_transcribe",
+        .description = "Transcribe an audio file using Zhipu ASR.",
+        .input_schema_json =
+            "{\"type\":\"object\","
+            "\"properties\":{\"path\":{\"type\":\"string\",\"description\":\"Local SPIFFS audio path\"},"
+            "\"model\":{\"type\":\"string\",\"description\":\"ASR model (default: " MIMI_ZHIPU_ASR_MODEL ")\"}},"
+            "\"required\":[\"path\"]}",
+        .execute = tool_audio_transcribe_execute,
+    };
+    register_tool(&at);
 
     build_tools_json();
 
