@@ -16,6 +16,9 @@
 #ifndef MIMI_SECRET_TG_TOKEN
 #define MIMI_SECRET_TG_TOKEN        ""
 #endif
+#ifndef MIMI_SECRET_DISCORD_TOKEN
+#define MIMI_SECRET_DISCORD_TOKEN   ""
+#endif
 #ifndef MIMI_SECRET_API_KEY
 #define MIMI_SECRET_API_KEY         ""
 #endif
@@ -55,6 +58,16 @@
 #define MIMI_TG_CARD_SHOW_MS         3000
 #define MIMI_TG_CARD_BODY_SCALE      3
 
+/* Discord (HTTP polling) */
+#define MIMI_DISCORD_POLL_INTERVAL_MS   1500
+#define MIMI_DISCORD_POLL_STACK         (12 * 1024)
+#define MIMI_DISCORD_POLL_PRIO          5
+#define MIMI_DISCORD_POLL_CORE          0
+#define MIMI_DISCORD_MAX_MSG_LEN        2000
+#define MIMI_DISCORD_MAX_CHANNELS       5
+#define MIMI_DISCORD_SAVE_STEP          5
+#define MIMI_DISCORD_SAVE_INTERVAL_US   (5LL * 1000 * 1000)
+
 /* Agent Loop */
 #define MIMI_AGENT_STACK             (24 * 1024)
 #define MIMI_AGENT_PRIO              6
@@ -70,7 +83,10 @@
 /* LLM */
 #define MIMI_LLM_DEFAULT_MODEL       "GLM-4-FlashX-250414"
 #define MIMI_LLM_PROVIDER_DEFAULT    "zhipu"
-#define MIMI_LLM_MAX_TOKENS          4096
+#define MIMI_LLM_MAX_TOKENS          1024
+#define MIMI_VISION_MAX_TOKENS       512
+#define MIMI_AGENT_REQUEST_GAP_MS    200
+#define MIMI_NET_MUTEX_TIMEOUT_MS   60000
 #define MIMI_LLM_API_URL             "https://api.anthropic.com/v1/messages"
 #define MIMI_OPENAI_API_URL          "https://api.openai.com/v1/chat/completions"
 #define MIMI_ZHIPU_CODING_API_URL    "https://open.bigmodel.cn/api/coding/paas/v4/chat/completions"
@@ -128,6 +144,7 @@
 /* NVS Namespaces */
 #define MIMI_NVS_WIFI                "wifi_config"
 #define MIMI_NVS_TG                  "tg_config"
+#define MIMI_NVS_DISCORD             "discord_config"
 #define MIMI_NVS_WECOM               "wecom_config"
 #define MIMI_NVS_LLM                 "llm_config"
 #define MIMI_NVS_PROXY               "proxy_config"
@@ -137,6 +154,7 @@
 #define MIMI_NVS_KEY_SSID            "ssid"
 #define MIMI_NVS_KEY_PASS            "password"
 #define MIMI_NVS_KEY_TG_TOKEN        "bot_token"
+#define MIMI_NVS_KEY_DISCORD_TOKEN   "bot_token"
 #define MIMI_NVS_KEY_WECOM_WEBHOOK   "webhook"
 #define MIMI_NVS_KEY_API_KEY         "api_key"
 #define MIMI_NVS_KEY_MODEL           "model"

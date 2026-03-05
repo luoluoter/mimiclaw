@@ -2,6 +2,7 @@
 #include "mimi_config.h"
 #include "media/media_driver.h"
 #include "proxy/http_proxy.h"
+#include "net/net_mutex.h"
 
 #include <string.h>
 #include <stdlib.h>
@@ -25,6 +26,22 @@ static const char *TAG = "media_tool";
 #define MEDIA_PATH_MAX 96
 
 static char s_api_key[320] = {0};
+
+static void log_http_client_error(esp_http_client_handle_t client,
+                                  const char *label,
+                                  esp_err_t err,
+                                  int status)
+{
+    int sock_errno = esp_http_client_get_errno(client);
+    int tls_code = 0;
+    int tls_flags = 0;
+    esp_err_t tls_err = esp_http_client_get_and_clear_last_tls_error(
+        client, &tls_code, &tls_flags);
+    ESP_LOGE(TAG,
+             "%s failed: err=%s status=%d errno=%d tls_err=%s tls_code=0x%x tls_flags=0x%x",
+             label, esp_err_to_name(err), status, sock_errno,
+             esp_err_to_name(tls_err), tls_code, tls_flags);
+}
 
 /* ── Helpers ─────────────────────────────────────────────────── */
 
@@ -193,9 +210,17 @@ static esp_err_t read_file(const char *path, uint8_t **out_buf, size_t *out_len,
 static esp_err_t http_post_json(const char *url, const char *host, const char *path,
                                 const char *payload, char **out_body, int *out_status)
 {
+    esp_err_t lock_err = net_mutex_lock(pdMS_TO_TICKS(MIMI_NET_MUTEX_TIMEOUT_MS));
+    if (lock_err != ESP_OK) {
+        ESP_LOGW(TAG, "HTTP POST lock failed: %s", esp_err_to_name(lock_err));
+        return lock_err;
+    }
     if (http_proxy_is_enabled()) {
         proxy_conn_t *conn = proxy_conn_open(host, 443, 30000);
-        if (!conn) return ESP_ERR_HTTP_CONNECT;
+        if (!conn) {
+            net_mutex_unlock();
+            return ESP_ERR_HTTP_CONNECT;
+        }
 
         int body_len = strlen(payload);
         char header[1024];
@@ -211,6 +236,7 @@ static esp_err_t http_post_json(const char *url, const char *host, const char *p
         if (proxy_conn_write(conn, header, hlen) < 0 ||
             proxy_conn_write(conn, payload, body_len) < 0) {
             proxy_conn_close(conn);
+            net_mutex_unlock();
             return ESP_ERR_HTTP_WRITE_DATA;
         }
 
@@ -219,6 +245,7 @@ static esp_err_t http_post_json(const char *url, const char *host, const char *p
         char *buf = calloc(1, cap);
         if (!buf) {
             proxy_conn_close(conn);
+            net_mutex_unlock();
             return ESP_ERR_NO_MEM;
         }
         char tmp[2048];
@@ -237,11 +264,16 @@ static esp_err_t http_post_json(const char *url, const char *host, const char *p
             buf[len] = '\0';
         }
         proxy_conn_close(conn);
+        net_mutex_unlock();
 
         *out_status = 0;
         if (len > 5 && strncmp(buf, "HTTP/", 5) == 0) {
             const char *sp = strchr(buf, ' ');
             if (sp) *out_status = atoi(sp + 1);
+        }
+        if (*out_status != 200) {
+            ESP_LOGW(TAG, "HTTP proxy POST %s status=%d body_len=%u",
+                     path, *out_status, (unsigned)len);
         }
         char *body = strstr(buf, "\r\n\r\n");
         if (body) {
@@ -255,11 +287,14 @@ static esp_err_t http_post_json(const char *url, const char *host, const char *p
     }
 
     resp_buf_t rb;
-    if (resp_buf_init(&rb, 16 * 1024) != ESP_OK) return ESP_ERR_NO_MEM;
+    if (resp_buf_init(&rb, 16 * 1024) != ESP_OK) {
+        net_mutex_unlock();
+        return ESP_ERR_NO_MEM;
+    }
 
     esp_http_client_config_t config = {
         .url = url,
-        .timeout_ms = 30000,
+        .timeout_ms = 60000,
         .buffer_size = 4096,
         .buffer_size_tx = 4096,
         .crt_bundle_attach = esp_crt_bundle_attach,
@@ -269,6 +304,7 @@ static esp_err_t http_post_json(const char *url, const char *host, const char *p
     esp_http_client_handle_t client = esp_http_client_init(&config);
     if (!client) {
         resp_buf_free(&rb);
+        net_mutex_unlock();
         return ESP_FAIL;
     }
 
@@ -285,6 +321,11 @@ static esp_err_t http_post_json(const char *url, const char *host, const char *p
 
     esp_err_t err = esp_http_client_perform(client);
     int status = esp_http_client_get_status_code(client);
+    if (err != ESP_OK) {
+        log_http_client_error(client, "HTTP POST", err, status);
+    } else if (status != 200) {
+        ESP_LOGW(TAG, "HTTP POST %s status=%d", path, status);
+    }
     esp_http_client_cleanup(client);
     if (rb.err != ESP_OK && err == ESP_OK) {
         err = rb.err;
@@ -295,6 +336,7 @@ static esp_err_t http_post_json(const char *url, const char *host, const char *p
     } else {
         resp_buf_free(&rb);
     }
+    net_mutex_unlock();
     return err;
 }
 
@@ -303,9 +345,17 @@ static esp_err_t http_post_multipart(const char *url, const char *host, const ch
                                      const uint8_t *body, size_t body_len,
                                      char **out_body, int *out_status)
 {
+    esp_err_t lock_err = net_mutex_lock(pdMS_TO_TICKS(MIMI_NET_MUTEX_TIMEOUT_MS));
+    if (lock_err != ESP_OK) {
+        ESP_LOGW(TAG, "HTTP multipart lock failed: %s", esp_err_to_name(lock_err));
+        return lock_err;
+    }
     if (http_proxy_is_enabled()) {
         proxy_conn_t *conn = proxy_conn_open(host, 443, 30000);
-        if (!conn) return ESP_ERR_HTTP_CONNECT;
+        if (!conn) {
+            net_mutex_unlock();
+            return ESP_ERR_HTTP_CONNECT;
+        }
         char header[1024];
         int hlen = snprintf(header, sizeof(header),
             "POST %s HTTP/1.1\r\n"
@@ -318,6 +368,7 @@ static esp_err_t http_post_multipart(const char *url, const char *host, const ch
         if (proxy_conn_write(conn, header, hlen) < 0 ||
             proxy_conn_write(conn, (const char *)body, (int)body_len) < 0) {
             proxy_conn_close(conn);
+            net_mutex_unlock();
             return ESP_ERR_HTTP_WRITE_DATA;
         }
         size_t cap = 16 * 1024;
@@ -325,6 +376,7 @@ static esp_err_t http_post_multipart(const char *url, const char *host, const ch
         char *buf = calloc(1, cap);
         if (!buf) {
             proxy_conn_close(conn);
+            net_mutex_unlock();
             return ESP_ERR_NO_MEM;
         }
         char tmp[2048];
@@ -343,10 +395,15 @@ static esp_err_t http_post_multipart(const char *url, const char *host, const ch
             buf[len] = '\0';
         }
         proxy_conn_close(conn);
+        net_mutex_unlock();
         *out_status = 0;
         if (len > 5 && strncmp(buf, "HTTP/", 5) == 0) {
             const char *sp = strchr(buf, ' ');
             if (sp) *out_status = atoi(sp + 1);
+        }
+        if (*out_status != 200) {
+            ESP_LOGW(TAG, "HTTP proxy POST %s status=%d body_len=%u",
+                     path, *out_status, (unsigned)len);
         }
         char *body_ptr = strstr(buf, "\r\n\r\n");
         if (body_ptr) {
@@ -360,11 +417,14 @@ static esp_err_t http_post_multipart(const char *url, const char *host, const ch
     }
 
     resp_buf_t rb;
-    if (resp_buf_init(&rb, 16 * 1024) != ESP_OK) return ESP_ERR_NO_MEM;
+    if (resp_buf_init(&rb, 16 * 1024) != ESP_OK) {
+        net_mutex_unlock();
+        return ESP_ERR_NO_MEM;
+    }
 
     esp_http_client_config_t config = {
         .url = url,
-        .timeout_ms = 30000,
+        .timeout_ms = 60000,
         .buffer_size = 4096,
         .buffer_size_tx = 4096,
         .crt_bundle_attach = esp_crt_bundle_attach,
@@ -374,6 +434,7 @@ static esp_err_t http_post_multipart(const char *url, const char *host, const ch
     esp_http_client_handle_t client = esp_http_client_init(&config);
     if (!client) {
         resp_buf_free(&rb);
+        net_mutex_unlock();
         return ESP_FAIL;
     }
     esp_http_client_set_method(client, HTTP_METHOD_POST);
@@ -389,6 +450,11 @@ static esp_err_t http_post_multipart(const char *url, const char *host, const ch
 
     esp_err_t err = esp_http_client_perform(client);
     int status = esp_http_client_get_status_code(client);
+    if (err != ESP_OK) {
+        log_http_client_error(client, "HTTP multipart", err, status);
+    } else if (status != 200) {
+        ESP_LOGW(TAG, "HTTP multipart %s status=%d", path, status);
+    }
     esp_http_client_cleanup(client);
     if (rb.err != ESP_OK && err == ESP_OK) {
         err = rb.err;
@@ -399,6 +465,7 @@ static esp_err_t http_post_multipart(const char *url, const char *host, const ch
     } else {
         resp_buf_free(&rb);
     }
+    net_mutex_unlock();
     return err;
 }
 
@@ -486,13 +553,27 @@ esp_err_t tool_observe_scene_execute(const char *input_json, char *output, size_
     const char *path = NULL;
     const char *prompt = NULL;
     const char *model = NULL;
+    char path_buf[MEDIA_PATH_MAX] = {0};
+    char prompt_buf[256] = {0};
+    char model_buf[64] = {0};
     bool do_capture = true;
     cJSON *root = input_json ? cJSON_Parse(input_json) : NULL;
     if (root) {
         const char *p = json_get_string(root, "path");
-        if (p && p[0]) path = p;
-        prompt = json_get_string(root, "prompt");
-        model = json_get_string(root, "model");
+        if (p && p[0]) {
+            strncpy(path_buf, p, sizeof(path_buf) - 1);
+            path = path_buf;
+        }
+        const char *pp = json_get_string(root, "prompt");
+        if (pp && pp[0]) {
+            strncpy(prompt_buf, pp, sizeof(prompt_buf) - 1);
+            prompt = prompt_buf;
+        }
+        const char *mm = json_get_string(root, "model");
+        if (mm && mm[0]) {
+            strncpy(model_buf, mm, sizeof(model_buf) - 1);
+            model = model_buf;
+        }
         do_capture = json_get_bool(root, "capture", true);
     }
     if (!prompt || prompt[0] == '\0') prompt = "Describe the image.";
@@ -512,8 +593,6 @@ esp_err_t tool_observe_scene_execute(const char *input_json, char *output, size_
 
     if (do_capture) {
         esp_err_t err = media_camera_capture(path, out_path, sizeof(out_path));
-        if (root) cJSON_Delete(root);
-
         if (err == ESP_ERR_NOT_SUPPORTED) {
             snprintf(output, output_size, "camera capture not supported on this build");
             return err;
@@ -526,12 +605,12 @@ esp_err_t tool_observe_scene_execute(const char *input_json, char *output, size_
             add_recent_path(path);
         }
     } else {
-        if (root) cJSON_Delete(root);
         if (!path || path[0] == '\0') {
             snprintf(output, output_size, "missing 'path' for analyze-only");
             return ESP_ERR_INVALID_ARG;
         }
     }
+    if (root) cJSON_Delete(root);
 
     const char *final_path = out_path[0] ? out_path : path;
     cJSON *vreq = cJSON_CreateObject();
@@ -623,6 +702,7 @@ esp_err_t tool_vision_analyze_execute(const char *input_json, char *output, size
     if (!model || model[0] == '\0') model = MIMI_ZHIPU_VISION_MODEL;
 
     char *data_url = NULL;
+    size_t image_len = 0;
     if (!url || url[0] == '\0') {
         if (!path || path[0] == '\0') {
             snprintf(output, output_size, "missing 'path' or 'url'");
@@ -637,6 +717,7 @@ esp_err_t tool_vision_analyze_execute(const char *input_json, char *output, size
             if (root) cJSON_Delete(root);
             return r;
         }
+        image_len = len;
         size_t b64_len = 0;
         mbedtls_base64_encode(NULL, 0, &b64_len, buf, len);
         char *b64 = calloc(1, b64_len + 1);
@@ -666,6 +747,7 @@ esp_err_t tool_vision_analyze_execute(const char *input_json, char *output, size
 
     cJSON *body = cJSON_CreateObject();
     cJSON_AddStringToObject(body, "model", model);
+    cJSON_AddNumberToObject(body, "max_tokens", MIMI_VISION_MAX_TOKENS);
     cJSON *msgs = cJSON_CreateArray();
     cJSON *msg = cJSON_CreateObject();
     cJSON_AddStringToObject(msg, "role", "user");
@@ -686,16 +768,28 @@ esp_err_t tool_vision_analyze_execute(const char *input_json, char *output, size
 
     char *payload = cJSON_PrintUnformatted(body);
     cJSON_Delete(body);
+    if (payload) {
+        ESP_LOGI(TAG, "Vision request: model=%s prompt_len=%u img_bytes=%u payload_len=%u",
+                 model, (unsigned)strlen(prompt),
+                 (unsigned)image_len, (unsigned)strlen(payload));
+        ESP_LOGI(TAG, "Vision prompt: %.96s", prompt);
+    }
 
     int status = 0;
     char *resp = NULL;
     esp_err_t err = ESP_OK;
     int attempts = 0;
-    for (; attempts < 2; attempts++) {
+    int backoff_ms = 500;
+    for (; attempts < 4; attempts++) {
         status = 0;
         resp = NULL;
         err = http_post_json(MIMI_ZHIPU_API_URL, MIMI_ZHIPU_API_HOST, MIMI_ZHIPU_API_PATH,
                              payload, &resp, &status);
+        if (err != ESP_OK || status != 200) {
+            ESP_LOGW(TAG, "Vision HTTP attempt %d failed: err=%s status=%d resp_len=%u",
+                     attempts + 1, esp_err_to_name(err), status,
+                     resp ? (unsigned)strlen(resp) : 0);
+        }
         if (err == ESP_OK && status == 200) {
             break;
         }
@@ -703,7 +797,9 @@ esp_err_t tool_vision_analyze_execute(const char *input_json, char *output, size
             free(resp);
             resp = NULL;
         }
-        vTaskDelay(500 / portTICK_PERIOD_MS);
+        vTaskDelay(pdMS_TO_TICKS(backoff_ms));
+        backoff_ms = backoff_ms * 2;
+        if (backoff_ms > 4000) backoff_ms = 4000;
     }
     free(payload);
     if (data_url) free(data_url);
@@ -716,6 +812,8 @@ esp_err_t tool_vision_analyze_execute(const char *input_json, char *output, size
         return err;
     }
     if (status != 200) {
+        ESP_LOGW(TAG, "Vision API error body (len=%u): %.200s",
+                 resp ? (unsigned)strlen(resp) : 0, resp ? resp : "(null)");
         snprintf(output, output_size, "vision API error %d: %.200s", status, resp ? resp : "");
         free(resp);
         return ESP_FAIL;

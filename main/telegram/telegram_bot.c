@@ -10,6 +10,7 @@
 #include "esp_timer.h"
 #include "esp_http_client.h"
 #include "esp_crt_bundle.h"
+#include "net/net_mutex.h"
 #include "nvs.h"
 #include "cJSON.h"
 
@@ -131,9 +132,17 @@ static esp_err_t http_event_handler(esp_http_client_event_t *evt)
 
 static char *tg_api_call_via_proxy(const char *path, const char *post_data)
 {
+    esp_err_t lock_err = net_mutex_lock(pdMS_TO_TICKS(MIMI_NET_MUTEX_TIMEOUT_MS));
+    if (lock_err != ESP_OK) {
+        ESP_LOGW(TAG, "Telegram HTTP lock failed: %s", esp_err_to_name(lock_err));
+        return NULL;
+    }
     proxy_conn_t *conn = proxy_conn_open("api.telegram.org", 443,
                                           (MIMI_TG_POLL_TIMEOUT_S + 5) * 1000);
-    if (!conn) return NULL;
+    if (!conn) {
+        net_mutex_unlock();
+        return NULL;
+    }
 
     /* Build HTTP request */
     char header[512];
@@ -156,17 +165,23 @@ static char *tg_api_call_via_proxy(const char *path, const char *post_data)
 
     if (proxy_conn_write(conn, header, hlen) < 0) {
         proxy_conn_close(conn);
+        net_mutex_unlock();
         return NULL;
     }
     if (post_data && proxy_conn_write(conn, post_data, strlen(post_data)) < 0) {
         proxy_conn_close(conn);
+        net_mutex_unlock();
         return NULL;
     }
 
     /* Read response — accumulate until connection close */
     size_t cap = 4096, len = 0;
     char *buf = calloc(1, cap);
-    if (!buf) { proxy_conn_close(conn); return NULL; }
+    if (!buf) {
+        proxy_conn_close(conn);
+        net_mutex_unlock();
+        return NULL;
+    }
 
     int timeout = (MIMI_TG_POLL_TIMEOUT_S + 5) * 1000;
     while (1) {
@@ -182,10 +197,14 @@ static char *tg_api_call_via_proxy(const char *path, const char *post_data)
     }
     buf[len] = '\0';
     proxy_conn_close(conn);
+    net_mutex_unlock();
 
     /* Skip HTTP headers — find \r\n\r\n */
     char *body = strstr(buf, "\r\n\r\n");
-    if (!body) { free(buf); return NULL; }
+    if (!body) {
+        free(buf);
+        return NULL;
+    }
     body += 4;
 
     /* Return just the body */
@@ -198,6 +217,11 @@ static char *tg_api_call_via_proxy(const char *path, const char *post_data)
 
 static char *tg_api_call_direct(const char *method, const char *post_data)
 {
+    esp_err_t lock_err = net_mutex_lock(pdMS_TO_TICKS(MIMI_NET_MUTEX_TIMEOUT_MS));
+    if (lock_err != ESP_OK) {
+        ESP_LOGW(TAG, "Telegram HTTP lock failed: %s", esp_err_to_name(lock_err));
+        return NULL;
+    }
     char url[256];
     snprintf(url, sizeof(url), "https://api.telegram.org/bot%s/%s", s_bot_token, method);
 
@@ -206,7 +230,10 @@ static char *tg_api_call_direct(const char *method, const char *post_data)
         .len = 0,
         .cap = 4096,
     };
-    if (!resp.buf) return NULL;
+    if (!resp.buf) {
+        net_mutex_unlock();
+        return NULL;
+    }
 
     esp_http_client_config_t config = {
         .url = url,
@@ -221,6 +248,7 @@ static char *tg_api_call_direct(const char *method, const char *post_data)
     esp_http_client_handle_t client = esp_http_client_init(&config);
     if (!client) {
         free(resp.buf);
+        net_mutex_unlock();
         return NULL;
     }
 
@@ -232,6 +260,7 @@ static char *tg_api_call_direct(const char *method, const char *post_data)
 
     esp_err_t err = esp_http_client_perform(client);
     esp_http_client_cleanup(client);
+    net_mutex_unlock();
 
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "HTTP request failed: %s", esp_err_to_name(err));

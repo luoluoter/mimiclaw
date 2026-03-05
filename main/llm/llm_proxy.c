@@ -8,6 +8,7 @@
 #include "esp_log.h"
 #include "esp_http_client.h"
 #include "esp_crt_bundle.h"
+#include "net/net_mutex.h"
 #include "esp_heap_caps.h"
 #include "nvs.h"
 #include "cJSON.h"
@@ -237,6 +238,11 @@ esp_err_t llm_proxy_init(void)
 
 static esp_err_t llm_http_direct(const char *post_data, resp_buf_t *rb, int *out_status)
 {
+    esp_err_t lock_err = net_mutex_lock(pdMS_TO_TICKS(MIMI_NET_MUTEX_TIMEOUT_MS));
+    if (lock_err != ESP_OK) {
+        ESP_LOGW(TAG, "LLM HTTP lock failed: %s", esp_err_to_name(lock_err));
+        return lock_err;
+    }
     esp_http_client_config_t config = {
         .url = llm_api_url(),
         .event_handler = http_event_handler,
@@ -248,7 +254,10 @@ static esp_err_t llm_http_direct(const char *post_data, resp_buf_t *rb, int *out
     };
 
     esp_http_client_handle_t client = esp_http_client_init(&config);
-    if (!client) return ESP_FAIL;
+    if (!client) {
+        net_mutex_unlock();
+        return ESP_FAIL;
+    }
 
     esp_http_client_set_method(client, HTTP_METHOD_POST);
     esp_http_client_set_header(client, "Content-Type", "application/json");
@@ -267,6 +276,7 @@ static esp_err_t llm_http_direct(const char *post_data, resp_buf_t *rb, int *out
     esp_err_t err = esp_http_client_perform(client);
     *out_status = esp_http_client_get_status_code(client);
     esp_http_client_cleanup(client);
+    net_mutex_unlock();
     return err;
 }
 

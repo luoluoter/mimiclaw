@@ -211,19 +211,19 @@ esp_err_t media_xiao_s3_init(void)
         .pin_pwdn = -1,
         .pin_reset = -1,
         .xclk_freq_hz = 20000000,
-        .frame_size = FRAMESIZE_VGA,
+        .frame_size = FRAMESIZE_QVGA,
         .pixel_format = PIXFORMAT_JPEG,
         .grab_mode = CAMERA_GRAB_LATEST,
         .fb_location = CAMERA_FB_IN_PSRAM,
-        .jpeg_quality = 15,
+        .jpeg_quality = 28,
         .fb_count = 1,
     };
 
     if (!esp_psram_is_initialized()) {
-        config.frame_size = FRAMESIZE_VGA;
+        config.frame_size = FRAMESIZE_QVGA;
         config.fb_location = CAMERA_FB_IN_DRAM;
         config.fb_count = 1;
-        config.jpeg_quality = 20;
+        config.jpeg_quality = 30;
     }
 
     esp_err_t err = esp_camera_init(&config);

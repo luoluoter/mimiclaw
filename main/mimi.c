@@ -13,6 +13,7 @@
 #include "bus/message_bus.h"
 #include "wifi/wifi_manager.h"
 #include "telegram/telegram_bot.h"
+#include "discord/discord_bot.h"
 #include "llm/llm_proxy.h"
 #include "agent/agent_loop.h"
 #include "memory/memory_store.h"
@@ -20,6 +21,7 @@
 #include "gateway/ws_server.h"
 #include "cli/serial_cli.h"
 #include "proxy/http_proxy.h"
+#include "net/net_mutex.h"
 #include "wecom/wecom_bot.h"
 #include "media/media_driver.h"
 #include "tools/tool_registry.h"
@@ -89,6 +91,11 @@ static void outbound_dispatch_task(void *arg)
                     ESP_LOGI(TAG, "Telegram send success for %s (%d bytes)", msg.chat_id, (int)strlen(msg.content));
                 }
             }
+        } else if (strcmp(msg.channel, MIMI_CHAN_DISCORD) == 0) {
+            esp_err_t dc_err = discord_send_message(msg.chat_id, msg.content);
+            if (dc_err != ESP_OK) {
+                ESP_LOGE(TAG, "Discord send failed for %s: %s", msg.chat_id, esp_err_to_name(dc_err));
+            }
         } else if (strcmp(msg.channel, MIMI_CHAN_WEBSOCKET) == 0) {
             esp_err_t ws_err = ws_server_send(msg.chat_id, msg.content);
             if (ws_err != ESP_OK) {
@@ -136,13 +143,12 @@ void app_main(void)
 
     /* Input */
     button_Init();
-    imu_manager_init();
-    imu_manager_set_shake_callback(NULL);
 
     /* Phase 1: Core infrastructure */
     ESP_ERROR_CHECK(init_nvs());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     ESP_ERROR_CHECK(init_spiffs());
+    ESP_ERROR_CHECK(net_mutex_init());
 
     /* Initialize subsystems */
     ESP_ERROR_CHECK(message_bus_init());
@@ -153,6 +159,7 @@ void app_main(void)
     ESP_ERROR_CHECK(wifi_manager_init());
     ESP_ERROR_CHECK(http_proxy_init());
     ESP_ERROR_CHECK(telegram_bot_init());
+    ESP_ERROR_CHECK(discord_bot_init());
     ESP_ERROR_CHECK(wecom_bot_init());
     ESP_ERROR_CHECK(llm_proxy_init());
     ESP_ERROR_CHECK(tool_registry_init());
@@ -182,6 +189,7 @@ void app_main(void)
             /* Start network-dependent services */
             ESP_ERROR_CHECK(agent_loop_start());
             ESP_ERROR_CHECK(telegram_bot_start());
+            ESP_ERROR_CHECK(discord_bot_start());
             cron_service_start();
             heartbeat_start();
             ESP_ERROR_CHECK(ws_server_start());

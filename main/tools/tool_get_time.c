@@ -9,6 +9,7 @@
 #include "esp_log.h"
 #include "esp_http_client.h"
 #include "esp_crt_bundle.h"
+#include "net/net_mutex.h"
 
 static const char *TAG = "tool_time";
 
@@ -64,8 +65,16 @@ static bool parse_and_set_time(const char *date_str, char *out, size_t out_size)
 /* Fetch time via proxy: HEAD request to api.telegram.org, parse Date header */
 static esp_err_t fetch_time_via_proxy(char *out, size_t out_size)
 {
+    esp_err_t lock_err = net_mutex_lock(pdMS_TO_TICKS(MIMI_NET_MUTEX_TIMEOUT_MS));
+    if (lock_err != ESP_OK) {
+        ESP_LOGW(TAG, "Time HTTP lock failed: %s", esp_err_to_name(lock_err));
+        return lock_err;
+    }
     proxy_conn_t *conn = proxy_conn_open("api.telegram.org", 443, 10000);
-    if (!conn) return ESP_ERR_HTTP_CONNECT;
+    if (!conn) {
+        net_mutex_unlock();
+        return ESP_ERR_HTTP_CONNECT;
+    }
 
     const char *req =
         "HEAD / HTTP/1.1\r\n"
@@ -74,6 +83,7 @@ static esp_err_t fetch_time_via_proxy(char *out, size_t out_size)
 
     if (proxy_conn_write(conn, req, strlen(req)) < 0) {
         proxy_conn_close(conn);
+        net_mutex_unlock();
         return ESP_ERR_HTTP_WRITE_DATA;
     }
 
@@ -87,6 +97,7 @@ static esp_err_t fetch_time_via_proxy(char *out, size_t out_size)
         if (strstr(buf, "\r\n\r\n")) break;
     }
     proxy_conn_close(conn);
+    net_mutex_unlock();
 
     /* Find Date header */
     char *date_hdr = strcasestr(buf, "\r\nDate: ");
@@ -135,6 +146,11 @@ static esp_err_t fetch_time_direct(char *out, size_t out_size)
 {
     time_header_ctx_t ctx = {0};
 
+    esp_err_t lock_err = net_mutex_lock(pdMS_TO_TICKS(MIMI_NET_MUTEX_TIMEOUT_MS));
+    if (lock_err != ESP_OK) {
+        ESP_LOGW(TAG, "Time HTTP lock failed: %s", esp_err_to_name(lock_err));
+        return lock_err;
+    }
     esp_http_client_config_t config = {
         .url = "https://api.telegram.org/",
         .method = HTTP_METHOD_HEAD,
@@ -145,10 +161,14 @@ static esp_err_t fetch_time_direct(char *out, size_t out_size)
     };
 
     esp_http_client_handle_t client = esp_http_client_init(&config);
-    if (!client) return ESP_FAIL;
+    if (!client) {
+        net_mutex_unlock();
+        return ESP_FAIL;
+    }
 
     esp_err_t err = esp_http_client_perform(client);
     esp_http_client_cleanup(client);
+    net_mutex_unlock();
 
     if (err != ESP_OK) return err;
     if (ctx.date_val[0] == '\0') return ESP_ERR_NOT_FOUND;

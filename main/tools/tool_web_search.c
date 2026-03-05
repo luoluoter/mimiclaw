@@ -7,6 +7,7 @@
 #include "esp_log.h"
 #include "esp_http_client.h"
 #include "esp_crt_bundle.h"
+#include "net/net_mutex.h"
 #include "esp_heap_caps.h"
 #include "nvs.h"
 #include "cJSON.h"
@@ -134,6 +135,11 @@ static void format_results(cJSON *root, char *output, size_t output_size)
 
 static esp_err_t search_direct(const char *url, search_buf_t *sb)
 {
+    esp_err_t lock_err = net_mutex_lock(pdMS_TO_TICKS(MIMI_NET_MUTEX_TIMEOUT_MS));
+    if (lock_err != ESP_OK) {
+        ESP_LOGW(TAG, "Search HTTP lock failed: %s", esp_err_to_name(lock_err));
+        return lock_err;
+    }
     esp_http_client_config_t config = {
         .url = url,
         .event_handler = http_event_handler,
@@ -144,7 +150,10 @@ static esp_err_t search_direct(const char *url, search_buf_t *sb)
     };
 
     esp_http_client_handle_t client = esp_http_client_init(&config);
-    if (!client) return ESP_FAIL;
+    if (!client) {
+        net_mutex_unlock();
+        return ESP_FAIL;
+    }
 
     esp_http_client_set_header(client, "Accept", "application/json");
     esp_http_client_set_header(client, "X-Subscription-Token", s_search_key);
@@ -152,6 +161,7 @@ static esp_err_t search_direct(const char *url, search_buf_t *sb)
     esp_err_t err = esp_http_client_perform(client);
     int status = esp_http_client_get_status_code(client);
     esp_http_client_cleanup(client);
+    net_mutex_unlock();
 
     if (err != ESP_OK) return err;
     if (status != 200) {
@@ -165,8 +175,16 @@ static esp_err_t search_direct(const char *url, search_buf_t *sb)
 
 static esp_err_t search_via_proxy(const char *path, search_buf_t *sb)
 {
+    esp_err_t lock_err = net_mutex_lock(pdMS_TO_TICKS(MIMI_NET_MUTEX_TIMEOUT_MS));
+    if (lock_err != ESP_OK) {
+        ESP_LOGW(TAG, "Search HTTP lock failed: %s", esp_err_to_name(lock_err));
+        return lock_err;
+    }
     proxy_conn_t *conn = proxy_conn_open("api.search.brave.com", 443, 15000);
-    if (!conn) return ESP_ERR_HTTP_CONNECT;
+    if (!conn) {
+        net_mutex_unlock();
+        return ESP_ERR_HTTP_CONNECT;
+    }
 
     char header[512];
     int hlen = snprintf(header, sizeof(header),
@@ -179,6 +197,7 @@ static esp_err_t search_via_proxy(const char *path, search_buf_t *sb)
 
     if (proxy_conn_write(conn, header, hlen) < 0) {
         proxy_conn_close(conn);
+        net_mutex_unlock();
         return ESP_ERR_HTTP_WRITE_DATA;
     }
 
@@ -197,6 +216,7 @@ static esp_err_t search_via_proxy(const char *path, search_buf_t *sb)
     sb->data[total] = '\0';
     sb->len = total;
     proxy_conn_close(conn);
+    net_mutex_unlock();
 
     /* Check status */
     int status = 0;

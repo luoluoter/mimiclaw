@@ -126,6 +126,8 @@ esp_err_t wifi_manager_start(void)
 
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_cfg));
     ESP_ERROR_CHECK(esp_wifi_start());
+    ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE));
+    ESP_LOGI(TAG, "WiFi power save disabled (WIFI_PS_NONE)");
 
     return ESP_OK;
 }

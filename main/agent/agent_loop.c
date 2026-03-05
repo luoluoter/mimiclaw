@@ -2,6 +2,7 @@
 #include "agent/context_builder.h"
 #include "mimi_config.h"
 #include "bus/message_bus.h"
+#include "discord/discord_bot.h"
 #include "llm/llm_proxy.h"
 #include "memory/session_mgr.h"
 #include "tools/tool_registry.h"
@@ -202,6 +203,9 @@ static cJSON *build_tool_results(const llm_response_t *resp, const mimi_msg_t *m
         free(patched_input);
 
         ESP_LOGI(TAG, "Tool %s result: %d bytes", call->name, (int)strlen(tool_output));
+        if (MIMI_AGENT_REQUEST_GAP_MS > 0) {
+            vTaskDelay(pdMS_TO_TICKS(MIMI_AGENT_REQUEST_GAP_MS));
+        }
 
         /* Build tool_result block */
         cJSON *result_block = cJSON_CreateObject();
@@ -239,6 +243,10 @@ static void agent_loop_task(void *arg)
         ESP_LOGI(TAG, "Processing message from %s:%s", msg.channel, msg.chat_id);
         char llm_error[256] = {0};
         esp_err_t last_err = ESP_OK;
+
+        if (strcmp(msg.channel, MIMI_CHAN_DISCORD) == 0) {
+            discord_send_typing(msg.chat_id);
+        }
 
         /* Optional: force fresh observation for vision requests */
         char *obs_text = NULL;
@@ -307,7 +315,9 @@ static void agent_loop_task(void *arg)
         while (iteration < MIMI_AGENT_MAX_TOOL_ITER) {
             /* Send "working" indicator before each API call */
 #if MIMI_AGENT_SEND_WORKING_STATUS
-            if (!sent_working_status && strcmp(msg.channel, MIMI_CHAN_SYSTEM) != 0) {
+            if (!sent_working_status &&
+                strcmp(msg.channel, MIMI_CHAN_SYSTEM) != 0 &&
+                strcmp(msg.channel, MIMI_CHAN_DISCORD) != 0) {
                 mimi_msg_t status = {0};
                 strncpy(status.channel, msg.channel, sizeof(status.channel) - 1);
                 strncpy(status.chat_id, msg.chat_id, sizeof(status.chat_id) - 1);
@@ -322,7 +332,9 @@ static void agent_loop_task(void *arg)
                 }
             }
 #endif
-
+            if (MIMI_AGENT_REQUEST_GAP_MS > 0) {
+                vTaskDelay(pdMS_TO_TICKS(MIMI_AGENT_REQUEST_GAP_MS));
+            }
             llm_response_t resp;
             err = llm_chat_tools(system_prompt, messages, tools_json, &resp);
 

@@ -6,6 +6,7 @@
 #include "esp_log.h"
 #include "esp_http_client.h"
 #include "esp_crt_bundle.h"
+#include "net/net_mutex.h"
 #include "nvs.h"
 #include "cJSON.h"
 
@@ -83,6 +84,12 @@ esp_err_t wecom_send_message(const char *text)
     cJSON_Delete(root);
     if (!payload) return ESP_ERR_NO_MEM;
 
+    esp_err_t lock_err = net_mutex_lock(pdMS_TO_TICKS(MIMI_NET_MUTEX_TIMEOUT_MS));
+    if (lock_err != ESP_OK) {
+        ESP_LOGW(TAG, "WeCom HTTP lock failed: %s", esp_err_to_name(lock_err));
+        free(payload);
+        return lock_err;
+    }
     esp_http_client_config_t config = {
         .url = s_webhook,
         .timeout_ms = 15000,
@@ -92,6 +99,7 @@ esp_err_t wecom_send_message(const char *text)
     };
     esp_http_client_handle_t client = esp_http_client_init(&config);
     if (!client) {
+        net_mutex_unlock();
         free(payload);
         return ESP_FAIL;
     }
@@ -103,6 +111,7 @@ esp_err_t wecom_send_message(const char *text)
     esp_err_t err = esp_http_client_perform(client);
     int status = esp_http_client_get_status_code(client);
     esp_http_client_cleanup(client);
+    net_mutex_unlock();
     free(payload);
 
     if (err != ESP_OK || status != 200) {

@@ -2,10 +2,12 @@
 #include "mimi_config.h"
 #include "wifi/wifi_manager.h"
 #include "telegram/telegram_bot.h"
+#include "discord/discord_bot.h"
 #include "llm/llm_proxy.h"
 #include "memory/memory_store.h"
 #include "memory/session_mgr.h"
 #include "proxy/http_proxy.h"
+#include "net/net_mutex.h"
 #include "tools/tool_registry.h"
 #include "tools/tool_web_search.h"
 #include "cron/cron_service.h"
@@ -19,10 +21,12 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <dirent.h>
+#include <inttypes.h>
 #include "esp_log.h"
 #include "esp_console.h"
 #include "esp_system.h"
 #include "esp_heap_caps.h"
+#include "esp_err.h"
 #include "nvs_flash.h"
 #include "nvs.h"
 #include "argtable3/argtable3.h"
@@ -73,6 +77,75 @@ static int cmd_set_tg_token(int argc, char **argv)
     telegram_set_token(tg_token_args.token->sval[0]);
     printf("Telegram bot token saved.\n");
     return 0;
+}
+
+/* --- set_discord_token command --- */
+static struct {
+    struct arg_str *token;
+    struct arg_end *end;
+} discord_token_args;
+
+static int cmd_set_discord_token(int argc, char **argv)
+{
+    int nerrors = arg_parse(argc, argv, (void **)&discord_token_args);
+    if (nerrors != 0) {
+        arg_print_errors(stderr, discord_token_args.end, argv[0]);
+        return 1;
+    }
+    discord_set_token(discord_token_args.token->sval[0]);
+    printf("Discord bot token saved.\n");
+    return 0;
+}
+
+/* --- discord_channel_add command --- */
+static struct {
+    struct arg_str *channel;
+    struct arg_end *end;
+} discord_channel_args;
+
+static int cmd_discord_channel_add(int argc, char **argv)
+{
+    int nerrors = arg_parse(argc, argv, (void **)&discord_channel_args);
+    if (nerrors != 0) {
+        arg_print_errors(stderr, discord_channel_args.end, argv[0]);
+        return 1;
+    }
+    esp_err_t err = discord_add_channel(discord_channel_args.channel->sval[0]);
+    printf("Discord channel add: %s\n", esp_err_to_name(err));
+    return err == ESP_OK ? 0 : 1;
+}
+
+static int cmd_discord_channel_remove(int argc, char **argv)
+{
+    int nerrors = arg_parse(argc, argv, (void **)&discord_channel_args);
+    if (nerrors != 0) {
+        arg_print_errors(stderr, discord_channel_args.end, argv[0]);
+        return 1;
+    }
+    esp_err_t err = discord_remove_channel(discord_channel_args.channel->sval[0]);
+    printf("Discord channel remove: %s\n", esp_err_to_name(err));
+    return err == ESP_OK ? 0 : 1;
+}
+
+static int cmd_discord_channel_list(int argc, char **argv)
+{
+    (void)argc; (void)argv;
+    discord_channel_t chans[MIMI_DISCORD_MAX_CHANNELS] = {0};
+    size_t count = 0;
+    discord_get_channels(chans, MIMI_DISCORD_MAX_CHANNELS, &count);
+    printf("Discord channels (%d):\n", (int)count);
+    for (size_t i = 0; i < count; i++) {
+        printf("  - %s (last_seen=%" PRIu64 ")\n", chans[i].id, chans[i].last_seen);
+    }
+    return 0;
+}
+
+static int cmd_discord_channel_clear(int argc, char **argv)
+{
+    (void)argc; (void)argv;
+    esp_err_t err = discord_clear_channels();
+    printf("Discord channels cleared: %s\n", esp_err_to_name(err));
+    return err == ESP_OK ? 0 : 1;
 }
 
 /* --- set_api_key command --- */
@@ -220,6 +293,22 @@ static int cmd_heap_info(int argc, char **argv)
            (int)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
     printf("Total free:    %d bytes\n",
            (int)esp_get_free_heap_size());
+    return 0;
+}
+
+/* --- net_stats command --- */
+static int cmd_net_stats(int argc, char **argv)
+{
+    (void)argc;
+    (void)argv;
+    net_mutex_stats_t s;
+    net_mutex_get_stats(&s);
+    uint32_t avg = (s.lock_count > 0)
+                       ? (uint32_t)(s.total_wait_ms / s.lock_count)
+                       : 0;
+    printf("net_mutex locks=%u timeouts=%u avg_wait_ms=%u max_wait_ms=%u last_wait_ms=%u\n",
+           (unsigned)s.lock_count, (unsigned)s.timeout_count,
+           (unsigned)avg, (unsigned)s.max_wait_ms, (unsigned)s.last_wait_ms);
     return 0;
 }
 
@@ -730,6 +819,53 @@ esp_err_t serial_cli_init(void)
     };
     esp_console_cmd_register(&tg_token_cmd);
 
+    /* set_discord_token */
+    discord_token_args.token = arg_str1(NULL, NULL, "<token>", "Discord bot token");
+    discord_token_args.end = arg_end(1);
+    esp_console_cmd_t discord_token_cmd = {
+        .command = "set_discord_token",
+        .help = "Set Discord bot token",
+        .func = &cmd_set_discord_token,
+        .argtable = &discord_token_args,
+    };
+    esp_console_cmd_register(&discord_token_cmd);
+
+    /* discord_channel_add */
+    discord_channel_args.channel = arg_str1(NULL, NULL, "<channel_id>", "Discord channel id");
+    discord_channel_args.end = arg_end(1);
+    esp_console_cmd_t discord_add_cmd = {
+        .command = "discord_channel_add",
+        .help = "Add a Discord channel to poll (e.g. discord_channel_add 123)",
+        .func = &cmd_discord_channel_add,
+        .argtable = &discord_channel_args,
+    };
+    esp_console_cmd_register(&discord_add_cmd);
+
+    /* discord_channel_remove */
+    esp_console_cmd_t discord_remove_cmd = {
+        .command = "discord_channel_remove",
+        .help = "Remove a Discord channel (e.g. discord_channel_remove 123)",
+        .func = &cmd_discord_channel_remove,
+        .argtable = &discord_channel_args,
+    };
+    esp_console_cmd_register(&discord_remove_cmd);
+
+    /* discord_channel_list */
+    esp_console_cmd_t discord_list_cmd = {
+        .command = "discord_channel_list",
+        .help = "List Discord channels",
+        .func = &cmd_discord_channel_list,
+    };
+    esp_console_cmd_register(&discord_list_cmd);
+
+    /* discord_channel_clear */
+    esp_console_cmd_t discord_clear_cmd = {
+        .command = "discord_channel_clear",
+        .help = "Clear all Discord channels",
+        .func = &cmd_discord_channel_clear,
+    };
+    esp_console_cmd_register(&discord_clear_cmd);
+
     /* set_api_key */
     api_key_args.key = arg_str1(NULL, NULL, "<key>", "LLM API key");
     api_key_args.end = arg_end(1);
@@ -849,6 +985,14 @@ esp_err_t serial_cli_init(void)
         .func = &cmd_heap_info,
     };
     esp_console_cmd_register(&heap_cmd);
+
+    /* net_stats */
+    esp_console_cmd_t net_stats_cmd = {
+        .command = "net_stats",
+        .help = "Show net mutex statistics",
+        .func = &cmd_net_stats,
+    };
+    esp_console_cmd_register(&net_stats_cmd);
 
     /* chat */
     esp_console_cmd_t chat_cmd = {
