@@ -1,315 +1,219 @@
-# MimiClaw: $5チップで動くポケットAIアシスタント
-
-<p align="center">
-  <img src="assets/banner.png" alt="MimiClaw" width="500" />
-</p>
-
-<p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
-  <a href="https://deepwiki.com/memovai/mimiclaw"><img src="https://img.shields.io/badge/DeepWiki-mimiclaw-blue.svg" alt="DeepWiki"></a>
-  <a href="https://discord.gg/r8ZxSvB8Yr"><img src="https://img.shields.io/badge/Discord-mimiclaw-5865F2?logo=discord&logoColor=white" alt="Discord"></a>
-  <a href="https://x.com/ssslvky"><img src="https://img.shields.io/badge/X-@ssslvky-black?logo=x" alt="X"></a>
-</p>
+# MimiClaw デプロイガイド
 
 <p align="center">
   <strong><a href="README.md">English</a> | <a href="README_CN.md">中文</a> | <a href="README_JA.md">日本語</a></strong>
 </p>
 
-**$5チップ上の世界初のAIアシスタント（OpenClaw）。Linuxなし、Node.jsなし、純粋なCのみ。**
+MimiClaw（`dev/seeed-xiao-s3`）の `lzx` コミット範囲向けデプロイガイドです。  
+最小構成のデフォルト経路は `Zhipu API + Discord` です。
 
-MimiClawは小さなESP32-S3ボードをパーソナルAIアシスタントに変えます。USB電源に接続し、WiFiにつなげて、Telegramから話しかけるだけ — どんなタスクも処理し、ローカルメモリで時間とともに成長します — すべて親指サイズのチップ上で。
+対象コミット範囲：`8354932` ~ `46dff47`
 
-## MimiClawの特徴
+この文書では、このコミット範囲で追加・変更された内容だけを扱います。
+- Web UI + WebSocket + bench
+- デフォルト構成は Zhipu + Discord、他チャネルは任意
+- OpenAI / Anthropic / WeCom / Telegram の任意設定
+- XIAO ESP32S3 Sense 向けメディアツール（撮影 / 録音 / 認識）
 
-- **超小型** — Linux不要、Node.js不要、無駄なし — 純粋なCのみ
-- **便利** — Telegramでメッセージを送るだけ、あとはお任せ
-- **忠実** — メモリから学習し、再起動しても忘れない
-- **省エネ** — USB給電、0.5W、24時間365日稼働
-- **お手頃** — ESP32-S3ボード1枚、$5、それだけ
+# Quick Start
 
-## 仕組み
+## 0) ハードウェアを用意する
 
-![](assets/mimiclaw.png)
+必須：
+- 開発ボード：Seeed XIAO ESP32S3
+  - 購入先：https://www.seeedstudio.com/XIAO-ESP32S3-p-5627.html
+  - Wiki：https://wiki.seeedstudio.com/xiao_esp32s3_getting_started/
+- USB-C データケーブル（充電専用ではないもの）
+- 2.4GHz Wi-Fi
 
-Telegramでメッセージを送ると、ESP32-S3がWiFi経由で受信し、エージェントループに送ります — LLMが思考し、ツールを呼び出し、メモリを読み取り — 返答を送り返します。**Anthropic (Claude)** と **OpenAI (GPT)** の両方をサポートし、実行時に切り替え可能です。すべてが$5のチップ上で動作し、データはすべてローカルのFlashに保存されます。
+写真や音声ツールを使う場合：
+- XIAO ESP32S3 Sense を推奨します（カメラとマイクの経路を含む）
+- 通常の XIAO ESP32S3 では `camera/audio not supported` と表示される場合があります
 
-## クイックスタート
-
-### 必要なもの
-
-- **ESP32-S3開発ボード**（16MB Flash + 8MB PSRAM搭載、例：小智AIボード、約$10）
-- **USB Type-Cケーブル**
-- **Telegram Botトークン** — Telegramで[@BotFather](https://t.me/BotFather)に話しかけて作成
-- **Anthropic APIキー** — [console.anthropic.com](https://console.anthropic.com)から取得、または **OpenAI APIキー** — [platform.openai.com](https://platform.openai.com)から取得
-
-### インストール
+## 1) リポジトリを取得してブランチを切り替える
 
 ```bash
-# まずESP-IDF v5.5+をインストールしてください:
-# https://docs.espressif.com/projects/esp-idf/en/v5.5.2/esp32s3/get-started/
-
 git clone https://github.com/memovai/mimiclaw.git
 cd mimiclaw
-
-idf.py set-target esp32s3
+git switch dev/seeed-xiao-s3
 ```
 
-<details>
-<summary>Ubuntu インストール</summary>
+## 2) ESP-IDF をインストールする（初回のみ）
 
-推奨ベースライン:
-
-- Ubuntu 22.04/24.04
-- Python >= 3.10
-- CMake >= 3.16
-- Ninja >= 1.10
-- Git >= 2.34
-- flex >= 2.6
-- bison >= 3.8
-- gperf >= 3.1
-- dfu-util >= 0.11
-- `libusb-1.0-0`, `libffi-dev`, `libssl-dev`
-
-Ubuntu でのインストールとビルド:
+Ubuntu：
 
 ```bash
-sudo apt-get update
-sudo apt-get install -y git wget flex bison gperf python3 python3-pip python3-venv \
-  cmake ninja-build ccache libffi-dev libssl-dev dfu-util libusb-1.0-0
-
 ./scripts/setup_idf_ubuntu.sh
-./scripts/build_ubuntu.sh
+. "$HOME/.espressif/esp-idf-v5.5.2/export.sh"
 ```
 
-</details>
-
-<details>
-<summary>macOS インストール</summary>
-
-推奨ベースライン:
-
-- macOS 12/13/14
-- Xcode Command Line Tools
-- Homebrew
-- Python >= 3.10
-- CMake >= 3.16
-- Ninja >= 1.10
-- Git >= 2.34
-- flex >= 2.6
-- bison >= 3.8
-- gperf >= 3.1
-- dfu-util >= 0.11
-- `libusb`, `libffi`, `openssl`
-
-macOS でのインストールとビルド:
+macOS：
 
 ```bash
-xcode-select --install
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-
 ./scripts/setup_idf_macos.sh
-./scripts/build_macos.sh
+. "$HOME/.espressif/esp-idf-v5.5.2/export.sh"
 ```
 
-</details>
-
-### 設定
-
-MimiClawは**2層設定**を採用しています：`mimi_secrets.h`でビルド時のデフォルト値を設定し、シリアルCLIで実行時にオーバーライドできます。CLI設定値はNVS Flashに保存され、ビルド時の値より優先されます。
+## 3) 設定を記入する（デフォルト：Zhipu + Discord）
 
 ```bash
 cp main/mimi_secrets.h.example main/mimi_secrets.h
 ```
 
-`main/mimi_secrets.h`を編集：
+最小構成として `main/mimi_secrets.h` を次のように編集します。
 
 ```c
-#define MIMI_SECRET_WIFI_SSID       "WiFi名"
-#define MIMI_SECRET_WIFI_PASS       "WiFiパスワード"
-#define MIMI_SECRET_TG_TOKEN        "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
-#define MIMI_SECRET_API_KEY         "sk-ant-api03-xxxxx"
-#define MIMI_SECRET_MODEL_PROVIDER  "anthropic"     // "anthropic" または "openai"
-#define MIMI_SECRET_SEARCH_KEY      ""              // 任意：Brave Search APIキー
-#define MIMI_SECRET_PROXY_HOST      ""              // 任意：例 "10.0.0.1"
-#define MIMI_SECRET_PROXY_PORT      ""              // 任意：例 "7897"
+#define MIMI_SECRET_WIFI_SSID       "YOUR_WIFI"
+#define MIMI_SECRET_WIFI_PASS       "YOUR_WIFI_PASSWORD"
+
+#define MIMI_SECRET_API_KEY         "YOUR_API_KEY"
+#define MIMI_SECRET_MODEL_PROVIDER  "zhipu"     // zhipu | openai | anthropic
+#define MIMI_SECRET_MODEL           "GLM-4-FlashX-250414"
+
+#define MIMI_SECRET_DISCORD_TOKEN   "YOUR_DISCORD_BOT_TOKEN"
+#define MIMI_SECRET_TG_TOKEN        ""          // 任意
+#define MIMI_SECRET_WECOM_WEBHOOK   ""          // 任意
 ```
 
-ビルドとフラッシュ：
+API キーの取得先：
+- Zhipu：https://open.bigmodel.cn/
+- OpenAI（任意）：https://platform.openai.com/
+- Anthropic（任意）：https://console.anthropic.com/
+
+よくある落とし穴：
+- `MODEL_PROVIDER` と `MODEL` は一致している必要があります。不一致だとリクエストは失敗します。
+- Discord チャンネルを設定していない場合、ボットは対象チャンネルに返信しません。
+- CLI だけで試すなら Discord / Telegram は空でも構いません。
+- 制限のあるネットワークでは、先に CLI でプロキシを設定してください：`set_proxy HOST PORT [http|socks5]`
+
+## 4) ビルドして書き込む
 
 ```bash
-# フルビルド（mimi_secrets.h変更後はfullclean必須）
-idf.py fullclean && idf.py build
-
-# シリアルポートを確認
-ls /dev/cu.usb*          # macOS
-ls /dev/ttyACM*          # Linux
-
-# フラッシュとモニター（PORTをあなたのポートに置き換え）
-# USBアダプタ：おそらく /dev/cu.usbmodem11401（macOS）または /dev/ttyACM0（Linux）
-idf.py -p PORT flash monitor
+idf.py set-target esp32s3
+idf.py fullclean
+idf.py build
 ```
 
-> **重要：正しいUSBポートに接続してください！** ほとんどのESP32-S3ボードには2つのUSB-Cポートがあります。**USB**（ネイティブUSB Serial/JTAG）と書かれたポートを使用してください。**COM**（外部UARTブリッジ）と書かれたポートは使わないでください。間違ったポートに接続するとフラッシュ/モニターが失敗します。
->
-> <details>
-> <summary>参考画像を表示</summary>
->
-> <img src="assets/esp32s3-usb-port.jpg" alt="USBポートに接続、COMポートではありません" width="480" />
->
-> </details>
-
-### CLIコマンド（UART/COMポート経由）
-
-シリアル接続で設定やデバッグができます。**設定コマンド**により再コンパイル不要で設定変更可能 — USBケーブルを挿すだけ。
-
-**実行時設定**（NVSに保存、ビルド時のデフォルト値をオーバーライド）：
-
-```
-mimi> wifi_set MySSID MyPassword   # WiFiネットワークを変更
-mimi> set_tg_token 123456:ABC...   # Telegram Botトークンを変更
-mimi> set_api_key sk-ant-api03-... # APIキーを変更（AnthropicまたはOpenAI）
-mimi> set_model_provider openai    # プロバイダーを切替（anthropic|openai）
-mimi> set_model gpt-4o             # LLMモデルを変更
-mimi> set_proxy 127.0.0.1 7897    # HTTPプロキシを設定
-mimi> clear_proxy                  # プロキシを削除
-mimi> set_search_key BSA...        # Brave Search APIキーを設定
-mimi> config_show                  # 全設定を表示（マスク付き）
-mimi> config_reset                 # NVSをクリア、ビルド時デフォルトに戻す
-```
-
-**デバッグ・メンテナンス：**
-
-```
-mimi> wifi_status              # 接続されていますか？
-mimi> memory_read              # ボットが何を覚えているか確認
-mimi> memory_write "内容"       # MEMORY.mdに書き込み
-mimi> heap_info                # 空きRAMはどれくらい？
-mimi> session_list             # 全チャットセッションを一覧
-mimi> session_clear 12345      # 会話を削除
-mimi> heartbeat_trigger           # ハートビートチェックを手動トリガー
-mimi> cron_start                  # cronスケジューラを今すぐ開始
-mimi> restart                     # 再起動
-```
-
-### USB（JTAG）vs UART：どのポートで何をするか
-
-ほとんどの ESP32-S3 開発ボードには **2つの USB-C ポート**があります：
-
-| ポート | 用途 |
-|--------|------|
-| **USB**（JTAG） | `idf.py flash`、JTAGデバッグ |
-| **COM**（UART） | **REPL CLI**、シリアルコンソール |
-
-> **REPLにはUART（COM）ポートが必要です。** USB（JTAG）ポートは対話的なREPL入力をサポートしません。
-
-<details>
-<summary>ポート詳細と推奨ワークフロー</summary>
-
-| ポート | ラベル | プロトコル |
-|--------|--------|------------|
-| **USB** | USB / JTAG | ネイティブ USB Serial/JTAG |
-| **COM** | UART / COM | 外部 UART ブリッジ（CP2102/CH340） |
-
-ESP-IDFコンソールはデフォルトでUART出力に設定されています（`CONFIG_ESP_CONSOLE_UART_DEFAULT=y`）。
-
-**両方のポートを同時に接続している場合：**
-
-- USB（JTAG）ポートはフラッシュ/ダウンロードを処理し、補助シリアル出力を提供
-- UART（COM）ポートはREPL用のメインインタラクティブコンソールを提供
-- macOS では両ポートとも `/dev/cu.usbmodem*` または `/dev/cu.usbserial-*` として表示 — `ls /dev/cu.usb*` で確認
-- Linux では USB（JTAG）は通常 `/dev/ttyACM0`、UART は通常 `/dev/ttyUSB0`
-
-**推奨ワークフロー：**
+シリアルポートを確認：
 
 ```bash
-# USB（JTAG）ポートでフラッシュ
-idf.py -p /dev/cu.usbmodem11401 flash
+# Linux
+ls /dev/ttyACM* /dev/ttyUSB*
 
-# UART（COM）ポートでREPLを開く
-idf.py -p /dev/cu.usbserial-110 monitor
-# または任意のシリアルターミナル：screen、minicom、PuTTY（ボーレート 115200）
+# macOS
+ls /dev/cu.usb*
 ```
 
-</details>
+書き込みとログ監視：
 
-## メモリ
+```bash
+idf.py -p /dev/ttyACM0 flash monitor
+```
 
-MimiClawはすべてのデータをプレーンテキストファイルとして保存します。直接読み取り・編集可能です：
+よくある落とし穴：
+- Type-C ポートが 2 つある基板では、書き込みにはネイティブ USB/JTAG ポートを使ってください。
+- `monitor` でコマンド入力できない場合は、UART/COM ポートに切り替えて再度開いてください。
 
-| ファイル | 説明 |
-|----------|------|
-| `SOUL.md` | ボットの性格 — 編集して振る舞いを変更 |
-| `USER.md` | あなたの情報 — 名前、好み、言語 |
-| `MEMORY.md` | 長期記憶 — ボットが常に覚えておくべきこと |
-| `HEARTBEAT.md` | タスクリスト — ボットが定期的にチェックして自律的に実行 |
-| `cron.json` | スケジュールジョブ — AIが作成した定期・単発タスク |
-| `2026-02-05.md` | 日次メモ — 今日あったこと |
-| `tg_12345.jsonl` | チャット履歴 — ボットとの会話 |
+## 5) 実行時に設定を上書きする（コード変更なし、CLI のみ）
 
-## ツール
+```text
+mimi> set_wifi YOUR_WIFI YOUR_WIFI_PASSWORD
+mimi> set_api_key YOUR_API_KEY
+mimi> set_model_provider zhipu
+mimi> set_model GLM-4-FlashX-250414
+mimi> set_discord_token YOUR_DISCORD_BOT_TOKEN
+mimi> discord_channel_add 123456789012345678
+mimi> discord_channel_list
+mimi> config_show
+mimi> restart
+```
 
-MimiClawはAnthropicとOpenAI両方のツール呼び出しをサポート — LLMは会話中にツールを呼び出し、タスクが完了するまでループします（ReActパターン）。
+# Examples
 
-| ツール | 説明 |
-|--------|------|
-| `web_search` | Brave Search APIでウェブ検索、最新情報を取得 |
-| `get_current_time` | HTTP経由で現在の日時を取得し、システムクロックを設定 |
-| `cron_add` | 定期または単発タスクをスケジュール（LLMが自律的にcronジョブを作成） |
-| `cron_list` | スケジュール済みのcronジョブを一覧表示 |
-| `cron_remove` | IDでcronジョブを削除 |
+## A) まず基本経路を確認する
 
-ウェブ検索を有効にするには、`mimi_secrets.h`で[Brave Search APIキー](https://brave.com/search/api/)（`MIMI_SECRET_SEARCH_KEY`）を設定してください。
+```text
+mimi> wifi_status
+mimi> chat hello
+mimi> bench all
+mimi> bench llm
+```
 
-## Cronタスク
+## B) Web UI / WebSocket を確認する
 
-MimiClawにはcronスケジューラが内蔵されており、AIが自律的にタスクをスケジュールできます。LLMは`cron_add`ツールで定期ジョブ（「N秒ごと」）や単発ジョブ（「UNIXタイムスタンプで指定」）を作成できます。ジョブが発火すると、メッセージがエージェントループに注入され、AIが起動してタスクを処理・応答します。
+```text
+http://<device_ip>:18789/
+ws://<device_ip>:18789/ws
+```
 
-ジョブはSPIFFS（`cron.json`）に永続化され、再起動後も保持されます。活用例：日次サマリー、定期リマインダー、スケジュールチェック。
+## C) メディアツール（Sense）を確認する
 
-## ハートビート
+```text
+mimi> tool_exec observe_scene '{"prompt":"Describe the image."}'
+mimi> tool_exec listen_and_transcribe '{"duration_ms":3000}'
+mimi> tool_exec device_cli '{"command":"cam_get"}'
+mimi> tool_exec device_cli '{"command":"cam_set","framesize":"VGA","quality":15}'
+```
 
-ハートビートサービスはSPIFFS上の`HEARTBEAT.md`を定期的に読み取り、アクション可能なタスクがあるかチェックします。未完了の項目（空行、見出し、チェック済み`- [x]`以外）が見つかると、エージェントループにプロンプトを送信し、AIが自律的に処理します。
+## D) その他のチャネル（任意）
 
-これによりMimiClawはプロアクティブなアシスタントになります — `HEARTBEAT.md`にタスクを書き込めば、次のハートビートサイクルで自動的に拾い上げて実行します（デフォルト：30分ごと）。
+```text
+mimi> set_tg_token 123456:ABCDEF...
+mimi> set_wecom_webhook https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_KEY
+```
 
-## その他の機能
+## E) 価値のある活用シナリオ
 
-- **WebSocketゲートウェイ** — ポート18789、LAN内から任意のWebSocketクライアントで接続
-- **OTAアップデート** — WiFi経由でファームウェア更新、USB不要
-- **デュアルコア** — ネットワークI/OとAI処理が別々のCPUコアで動作
-- **HTTPプロキシ** — CONNECTトンネル対応、制限付きネットワークに対応
-- **マルチプロバイダー** — Anthropic (Claude) と OpenAI (GPT) の両方をサポート、実行時に切り替え可能
-- **Cronスケジューラ** — AIが定期・単発タスクを自律的にスケジュール、再起動後も永続化
-- **ハートビート** — タスクファイルを定期チェックし、AIを自律的に駆動
-- **ツール呼び出し** — ReActエージェントループ、両プロバイダーでツール呼び出し対応
+1. リモート画像/音声取得 + クラウドモデル解析  
+Discord から自然言語で指示を送り、デバイスがローカルで取得し、その結果をクラウドモデルに渡します。
 
-## 開発者向け
+```text
+mimi> tool_exec observe_scene '{"prompt":"玄関で今、何か異常はありますか？"}'
+mimi> tool_exec listen_and_transcribe '{"duration_ms":5000}'
+```
 
-技術的な詳細は`docs/`フォルダにあります：
+2. スマートホーム制御ハブ（次の拡張）  
+現状でも「認識 + 理解」までは実行できます。照明やカーテンを制御する HTTP/MQTT ツールを追加すれば閉ループになります。
 
-- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — システム設計、モジュール構成、タスクレイアウト、メモリバジェット、プロトコル、Flashパーティション
-- **[docs/TODO.md](docs/TODO.md)** — 機能ギャップとロードマップ
+```text
+# 現段階では、まず環境判断をさせる
+mimi> tool_exec observe_scene '{"prompt":"部屋は暗すぎますか？電気をつけるべきか提案してください。"}'
+```
 
-## 貢献
+3. ペット視点の Q&A  
+首輪やバッグに付けて、今何を見ているか、何を聞いているかを遠隔で尋ねられます。
 
-Issue や Pull Request を作成する前に、**[CONTRIBUTING.md](CONTRIBUTING.md)** をご確認ください。
+```text
+mimi> tool_exec observe_scene '{"prompt":"このペットは今何をしていますか？"}'
+mimi> tool_exec listen_and_transcribe '{"duration_ms":3000}'
+```
 
-## コントリビューター
+4. ペット運動分析（IMU と組み合わせ）
+- 活動強度と時間に基づく消費カロリー推定
+- 異常動作を検出する歩容解析
+- 走行、静止、伏せなどの行動認識
 
-MimiClaw に貢献してくれた皆さんに感謝します。
+5. リモート巡回ノード
+- 低消費電力の観測点として定期取得し、要約を Discord に送る
+- 人や物音の有無を判定する
+- 異常時だけ人が介入する
 
-<a href="https://github.com/memovai/mimiclaw/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=memovai/mimiclaw" alt="MimiClaw contributors" />
-</a>
+# How It Works
 
-## ライセンス
+1. 起動時に `mimi_secrets.h` を読み込み、その後 NVS の実行時オーバーライドを読み込みます。
+2. Discord / CLI / WebSocket のメッセージ（および任意の Telegram）が同じ agent loop に入ります。
+3. `set_model_provider` で `zhipu` / `openai` / `anthropic` を切り替えます。
+4. `observe_scene` と `listen_and_transcribe` はメディアドライバとマルチモーダル API を使います。
+5. UI と WebSocket サーバは `18789` 番ポートで動作し、bench は CLI または WebSocket から実行できます。
 
-MIT
+# Links
 
-## 謝辞
-
-[OpenClaw](https://github.com/openclaw/openclaw)と[Nanobot](https://github.com/HKUDS/nanobot)にインスパイアされました。MimiClawはコアAIエージェントアーキテクチャを組み込みハードウェア向けに再実装しました — Linuxなし、サーバーなし、$5のチップだけ。
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=memovai/mimiclaw&type=Date)](https://star-history.com/#memovai/mimiclaw&Date)
+- Seeed XIAO ESP32S3 購入ページ：https://www.seeedstudio.com/XIAO-ESP32S3-p-5627.html
+- Seeed Wiki（入門）：https://wiki.seeedstudio.com/xiao_esp32s3_getting_started/
+- Secrets テンプレート：`main/mimi_secrets.h.example`
+- CLI コマンド定義：`main/cli/serial_cli.c`
+- ツール登録：`main/tools/tool_registry.c`
+- メディアツール実装：`main/tools/tool_media.c`
+- XIAO S3 メディアドライバ：`main/media/xiao_s3_media.c`
+- WS/UI サービス：`main/gateway/ws_server.c`
+- Bench 実装：`main/bench/bench.c`
