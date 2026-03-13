@@ -32,8 +32,15 @@ main/mimi_secrets.h
 
 # Cache / Compiled
 .cache
+__pycache__/
 *.pyc
 *.bin
+
+# Bridge service local runtime
+bridge_service/.venv/
+bridge_service/.run/
+bridge_service/logs/
+bridge_service/.frp/
 
 # Reference repos
 nanobot/

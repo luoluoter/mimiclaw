@@ -85,6 +85,7 @@ Common pitfalls:
 - If no Discord channel is configured, the bot will not reply in your target channel.
 - If you only test from the CLI, Discord/Telegram can stay empty.
 - In restricted networks, set a proxy from the CLI first: `set_proxy HOST PORT [http|socks5]`.
+- If you use the new bridge mode, the device does not need a Discord token; configure `set_bridge_url`, `set_bridge_device`, and `set_bridge_token` instead.
 
 ## 4) Build and flash
 
@@ -125,6 +126,16 @@ mimi> set_discord_token YOUR_DISCORD_BOT_TOKEN
 mimi> discord_channel_add 123456789012345678
 mimi> discord_channel_list
 mimi> config_show
+mimi> restart
+```
+
+Bridge mode example:
+
+```text
+mimi> set_bridge_url https://bridge.example.com
+mimi> set_bridge_device mimi-001
+mimi> set_bridge_token YOUR_DEVICE_SHARED_SECRET
+mimi> discord_channel_add 123456789012345678
 mimi> restart
 ```
 

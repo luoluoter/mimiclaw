@@ -12,6 +12,7 @@ idf_component_register(
         "discord/discord_bot.c"
         "llm/llm_proxy.c"
         "bench/bench.c"
+        "bridge/bridge_client.c"
         "media/media_driver.c"
         "media/camera_settings.c"
         "media/xiao_s3_media.c"

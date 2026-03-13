@@ -831,6 +831,20 @@ esp_err_t discord_set_token(const char *token)
     return ESP_OK;
 }
 
+esp_err_t discord_clear_token(void)
+{
+    nvs_handle_t nvs;
+    ESP_ERROR_CHECK(nvs_open(MIMI_NVS_DISCORD, NVS_READWRITE, &nvs));
+    nvs_erase_key(nvs, MIMI_NVS_KEY_DISCORD_TOKEN);
+    ESP_ERROR_CHECK(nvs_commit(nvs));
+    nvs_close(nvs);
+
+    s_bot_token[0] = '\0';
+    s_bot_user_id[0] = '\0';
+    ESP_LOGI(TAG, "Discord bot token cleared");
+    return ESP_OK;
+}
+
 esp_err_t discord_add_channel(const char *channel_id)
 {
     if (!channel_id || !channel_id[0]) return ESP_ERR_INVALID_ARG;

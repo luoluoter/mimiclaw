@@ -25,6 +25,7 @@
 #include "gateway/ws_server.h"
 #include "cli/serial_cli.h"
 #include "proxy/http_proxy.h"
+#include "bridge/bridge_client.h"
 #include "net/net_mutex.h"
 #include "wecom/wecom_bot.h"
 #include "media/media_driver.h"
@@ -140,7 +141,9 @@ static void outbound_dispatch_task(void *arg)
                 }
             }
         } else if (strcmp(msg.channel, MIMI_CHAN_DISCORD) == 0) {
-            esp_err_t dc_err = discord_send_message(msg.chat_id, msg.content);
+            esp_err_t dc_err = bridge_client_is_enabled()
+                ? bridge_send_message(msg.chat_id, msg.content)
+                : discord_send_message(msg.chat_id, msg.content);
             if (dc_err != ESP_OK) {
                 ESP_LOGE(TAG, "Discord send failed for %s: %s", msg.chat_id, esp_err_to_name(dc_err));
             }
@@ -212,6 +215,7 @@ void app_main(void)
     ESP_ERROR_CHECK(http_proxy_init());
     ESP_ERROR_CHECK(telegram_bot_init());
     ESP_ERROR_CHECK(discord_bot_init());
+    ESP_ERROR_CHECK(bridge_client_init());
     ESP_ERROR_CHECK(wecom_bot_init());
     ESP_ERROR_CHECK(llm_proxy_init());
     ESP_ERROR_CHECK(tool_registry_init());
@@ -242,7 +246,11 @@ void app_main(void)
             /* Start network-dependent services */
             ESP_ERROR_CHECK(agent_loop_start());
             ESP_ERROR_CHECK(telegram_bot_start());
-            ESP_ERROR_CHECK(discord_bot_start());
+            if (bridge_client_is_enabled()) {
+                ESP_ERROR_CHECK(bridge_client_start());
+            } else {
+                ESP_ERROR_CHECK(discord_bot_start());
+            }
             cron_service_start();
             heartbeat_start();
             ESP_ERROR_CHECK(ws_server_start());

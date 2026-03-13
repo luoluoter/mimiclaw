@@ -3,6 +3,7 @@
 #include "mimi_config.h"
 #include "bus/message_bus.h"
 #include "discord/discord_bot.h"
+#include "bridge/bridge_client.h"
 #include "llm/llm_proxy.h"
 #include "memory/session_mgr.h"
 #include "tools/tool_registry.h"
@@ -271,7 +272,11 @@ static void agent_loop_task(void *arg)
         char captured_image[128] = {0};
 
         if (strcmp(msg.channel, MIMI_CHAN_DISCORD) == 0) {
-            discord_send_typing(msg.chat_id);
+            if (bridge_client_is_enabled()) {
+                bridge_send_typing(msg.chat_id);
+            } else {
+                discord_send_typing(msg.chat_id);
+            }
         }
 
         /* Optional: force fresh observation for vision requests */
@@ -394,7 +399,9 @@ static void agent_loop_task(void *arg)
 
             if (!sent_discord_tool_status &&
                 strcmp(msg.channel, MIMI_CHAN_DISCORD) == 0) {
-                esp_err_t status_err = discord_send_message(msg.chat_id, "processing...");
+                esp_err_t status_err = bridge_client_is_enabled()
+                    ? bridge_send_message(msg.chat_id, "processing...")
+                    : discord_send_message(msg.chat_id, "processing...");
                 if (status_err != ESP_OK) {
                     ESP_LOGW(TAG, "Discord tool status send failed for %s: %s",
                              msg.chat_id, esp_err_to_name(status_err));
@@ -459,7 +466,9 @@ static void agent_loop_task(void *arg)
             if (sent_final &&
                 strcmp(msg.channel, MIMI_CHAN_DISCORD) == 0 &&
                 captured_image[0] != '\0') {
-                esp_err_t img_err = discord_send_file(msg.chat_id, captured_image, NULL);
+                esp_err_t img_err = bridge_client_is_enabled()
+                    ? bridge_send_file(msg.chat_id, captured_image, NULL)
+                    : discord_send_file(msg.chat_id, captured_image, NULL);
                 if (img_err != ESP_OK) {
                     ESP_LOGW(TAG, "Discord image send failed for %s: %s",
                              msg.chat_id, esp_err_to_name(img_err));

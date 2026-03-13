@@ -7,6 +7,7 @@
 #include "memory/memory_store.h"
 #include "memory/session_mgr.h"
 #include "proxy/http_proxy.h"
+#include "bridge/bridge_client.h"
 #include "net/net_mutex.h"
 #include "tools/tool_registry.h"
 #include "tools/tool_web_search.h"
@@ -155,6 +156,21 @@ static struct {
     struct arg_end *end;
 } discord_token_args;
 
+static struct {
+    struct arg_str *url;
+    struct arg_end *end;
+} bridge_url_args;
+
+static struct {
+    struct arg_str *device_id;
+    struct arg_end *end;
+} bridge_device_args;
+
+static struct {
+    struct arg_str *token;
+    struct arg_end *end;
+} bridge_token_args;
+
 static int cmd_set_discord_token(int argc, char **argv)
 {
     int nerrors = arg_parse(argc, argv, (void **)&discord_token_args);
@@ -165,6 +181,60 @@ static int cmd_set_discord_token(int argc, char **argv)
     discord_set_token(discord_token_args.token->sval[0]);
     printf("Discord bot token saved.\n");
     return 0;
+}
+
+static int cmd_clear_discord_token(int argc, char **argv)
+{
+    (void)argc;
+    (void)argv;
+    esp_err_t err = discord_clear_token();
+    printf("Discord bot token cleared: %s\n", esp_err_to_name(err));
+    return err == ESP_OK ? 0 : 1;
+}
+
+static int cmd_set_bridge_url(int argc, char **argv)
+{
+    int nerrors = arg_parse(argc, argv, (void **)&bridge_url_args);
+    if (nerrors != 0) {
+        arg_print_errors(stderr, bridge_url_args.end, argv[0]);
+        return 1;
+    }
+    esp_err_t err = bridge_set_url(bridge_url_args.url->sval[0]);
+    printf("Bridge URL save: %s\n", esp_err_to_name(err));
+    return err == ESP_OK ? 0 : 1;
+}
+
+static int cmd_set_bridge_device(int argc, char **argv)
+{
+    int nerrors = arg_parse(argc, argv, (void **)&bridge_device_args);
+    if (nerrors != 0) {
+        arg_print_errors(stderr, bridge_device_args.end, argv[0]);
+        return 1;
+    }
+    esp_err_t err = bridge_set_device_id(bridge_device_args.device_id->sval[0]);
+    printf("Bridge device save: %s\n", esp_err_to_name(err));
+    return err == ESP_OK ? 0 : 1;
+}
+
+static int cmd_set_bridge_token(int argc, char **argv)
+{
+    int nerrors = arg_parse(argc, argv, (void **)&bridge_token_args);
+    if (nerrors != 0) {
+        arg_print_errors(stderr, bridge_token_args.end, argv[0]);
+        return 1;
+    }
+    esp_err_t err = bridge_set_device_token(bridge_token_args.token->sval[0]);
+    printf("Bridge token save: %s\n", esp_err_to_name(err));
+    return err == ESP_OK ? 0 : 1;
+}
+
+static int cmd_clear_bridge(int argc, char **argv)
+{
+    (void)argc;
+    (void)argv;
+    esp_err_t err = bridge_clear_config();
+    printf("Bridge config cleared: %s\n", esp_err_to_name(err));
+    return err == ESP_OK ? 0 : 1;
 }
 
 /* --- discord_channel_add command --- */
@@ -738,6 +808,9 @@ static int cmd_config_show(int argc, char **argv)
     print_config("Provider",   MIMI_NVS_LLM,    MIMI_NVS_KEY_PROVIDER, MIMI_SECRET_MODEL_PROVIDER, false);
     print_config("Proxy Host", MIMI_NVS_PROXY,  MIMI_NVS_KEY_PROXY_HOST, MIMI_SECRET_PROXY_HOST, false);
     print_config("Proxy Port", MIMI_NVS_PROXY,  MIMI_NVS_KEY_PROXY_PORT, MIMI_SECRET_PROXY_PORT, false);
+    print_config("Bridge URL", MIMI_NVS_BRIDGE, MIMI_NVS_KEY_BRIDGE_URL, MIMI_SECRET_BRIDGE_URL, false);
+    print_config("Bridge Dev", MIMI_NVS_BRIDGE, MIMI_NVS_KEY_BRIDGE_DEVICE_ID, MIMI_SECRET_BRIDGE_DEVICE_ID, false);
+    print_config("Bridge Tok", MIMI_NVS_BRIDGE, MIMI_NVS_KEY_BRIDGE_DEVICE_TOKEN, MIMI_SECRET_BRIDGE_DEVICE_TOKEN, true);
     print_config("Search Key", MIMI_NVS_SEARCH, MIMI_NVS_KEY_API_KEY,  MIMI_SECRET_SEARCH_KEY, true);
     printf("=============================\n");
     return 0;
@@ -747,9 +820,9 @@ static int cmd_config_show(int argc, char **argv)
 static int cmd_config_reset(int argc, char **argv)
 {
     const char *namespaces[] = {
-        MIMI_NVS_WIFI, MIMI_NVS_TG, MIMI_NVS_WECOM, MIMI_NVS_LLM, MIMI_NVS_PROXY, MIMI_NVS_SEARCH
+        MIMI_NVS_WIFI, MIMI_NVS_TG, MIMI_NVS_WECOM, MIMI_NVS_LLM, MIMI_NVS_PROXY, MIMI_NVS_SEARCH, MIMI_NVS_BRIDGE
     };
-    for (int i = 0; i < 6; i++) {
+    for (int i = 0; i < 7; i++) {
         nvs_handle_t nvs;
         if (nvs_open(namespaces[i], NVS_READWRITE, &nvs) == ESP_OK) {
             nvs_erase_all(nvs);
@@ -932,6 +1005,54 @@ esp_err_t serial_cli_init(void)
         .argtable = &discord_token_args,
     };
     esp_console_cmd_register(&discord_token_cmd);
+
+    esp_console_cmd_t clear_discord_token_cmd = {
+        .command = "clear_discord_token",
+        .help = "Clear Discord bot token",
+        .func = &cmd_clear_discord_token,
+    };
+    esp_console_cmd_register(&clear_discord_token_cmd);
+
+    /* set_bridge_url */
+    bridge_url_args.url = arg_str1(NULL, NULL, "<url>", "Bridge base URL");
+    bridge_url_args.end = arg_end(1);
+    esp_console_cmd_t bridge_url_cmd = {
+        .command = "set_bridge_url",
+        .help = "Set bridge base URL (e.g. https://bridge.example.com)",
+        .func = &cmd_set_bridge_url,
+        .argtable = &bridge_url_args,
+    };
+    esp_console_cmd_register(&bridge_url_cmd);
+
+    /* set_bridge_device */
+    bridge_device_args.device_id = arg_str1(NULL, NULL, "<device_id>", "Bridge device id");
+    bridge_device_args.end = arg_end(1);
+    esp_console_cmd_t bridge_device_cmd = {
+        .command = "set_bridge_device",
+        .help = "Set bridge device id",
+        .func = &cmd_set_bridge_device,
+        .argtable = &bridge_device_args,
+    };
+    esp_console_cmd_register(&bridge_device_cmd);
+
+    /* set_bridge_token */
+    bridge_token_args.token = arg_str1(NULL, NULL, "<token>", "Bridge device token");
+    bridge_token_args.end = arg_end(1);
+    esp_console_cmd_t bridge_token_cmd = {
+        .command = "set_bridge_token",
+        .help = "Set bridge device token",
+        .func = &cmd_set_bridge_token,
+        .argtable = &bridge_token_args,
+    };
+    esp_console_cmd_register(&bridge_token_cmd);
+
+    /* clear_bridge */
+    esp_console_cmd_t clear_bridge_cmd = {
+        .command = "clear_bridge",
+        .help = "Clear bridge configuration",
+        .func = &cmd_clear_bridge,
+    };
+    esp_console_cmd_register(&clear_bridge_cmd);
 
     /* discord_channel_add */
     discord_channel_args.channel = arg_str1(NULL, NULL, "<channel_id>", "Discord channel id");

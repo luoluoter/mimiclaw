@@ -1,0 +1,10 @@
+serverAddr = "YOUR_FRPS_HOST"
+serverPort = 7000
+auth.token = "YOUR_FRP_TOKEN"
+
+[[proxies]]
+name = "mimi-bridge"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 8787
+remotePort = 12345

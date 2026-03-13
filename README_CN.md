@@ -85,6 +85,7 @@ API key 获取入口：
 - 如果没有配置 Discord 频道，机器人不会在目标频道里回消息。
 - 如果你只通过 CLI 测试，可以不填 Discord / Telegram。
 - 网络受限时，先在 CLI 里设置代理：`set_proxy HOST PORT [http|socks5]`。
+- 如果走新的 bridge 模式，设备端不需要 Discord token，改为配置 `set_bridge_url`、`set_bridge_device`、`set_bridge_token`。
 
 ## 4) 编译与烧录
 
@@ -125,6 +126,16 @@ mimi> set_discord_token YOUR_DISCORD_BOT_TOKEN
 mimi> discord_channel_add 123456789012345678
 mimi> discord_channel_list
 mimi> config_show
+mimi> restart
+```
+
+Bridge 模式示例：
+
+```text
+mimi> set_bridge_url https://bridge.example.com
+mimi> set_bridge_device mimi-001
+mimi> set_bridge_token YOUR_DEVICE_SHARED_SECRET
+mimi> discord_channel_add 123456789012345678
 mimi> restart
 ```
 

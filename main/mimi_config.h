@@ -43,6 +43,15 @@
 #ifndef MIMI_SECRET_WECOM_WEBHOOK
 #define MIMI_SECRET_WECOM_WEBHOOK   ""
 #endif
+#ifndef MIMI_SECRET_BRIDGE_URL
+#define MIMI_SECRET_BRIDGE_URL      ""
+#endif
+#ifndef MIMI_SECRET_BRIDGE_DEVICE_ID
+#define MIMI_SECRET_BRIDGE_DEVICE_ID ""
+#endif
+#ifndef MIMI_SECRET_BRIDGE_DEVICE_TOKEN
+#define MIMI_SECRET_BRIDGE_DEVICE_TOKEN ""
+#endif
 
 /* WiFi */
 #define MIMI_WIFI_MAX_RETRY          10
@@ -68,6 +77,12 @@
 #define MIMI_DISCORD_SAVE_STEP          5
 #define MIMI_DISCORD_SAVE_INTERVAL_US   (5LL * 1000 * 1000)
 #define MIMI_DISCORD_TYPING_COOLDOWN_MS 8000
+
+/* Bridge */
+#define MIMI_BRIDGE_POLL_INTERVAL_MS    2000
+#define MIMI_BRIDGE_POLL_STACK          (12 * 1024)
+#define MIMI_BRIDGE_POLL_PRIO           5
+#define MIMI_BRIDGE_POLL_CORE           0
 
 /* Agent Loop */
 #define MIMI_AGENT_STACK             (24 * 1024)
@@ -157,6 +172,7 @@
 #define MIMI_NVS_LLM                 "llm_config"
 #define MIMI_NVS_PROXY               "proxy_config"
 #define MIMI_NVS_SEARCH              "search_config"
+#define MIMI_NVS_BRIDGE              "bridge_config"
 
 /* NVS Keys */
 #define MIMI_NVS_KEY_SSID            "ssid"
@@ -169,3 +185,6 @@
 #define MIMI_NVS_KEY_PROVIDER        "provider"
 #define MIMI_NVS_KEY_PROXY_HOST      "host"
 #define MIMI_NVS_KEY_PROXY_PORT      "port"
+#define MIMI_NVS_KEY_BRIDGE_URL      "url"
+#define MIMI_NVS_KEY_BRIDGE_DEVICE_ID "device_id"
+#define MIMI_NVS_KEY_BRIDGE_DEVICE_TOKEN "device_tok"
