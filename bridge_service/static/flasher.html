@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MimiClaw Local Flasher</title>
+    <script
+      type="module"
+      src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"
+    ></script>
+    <style>
+      :root {
+        --bg: #f3efe6;
+        --panel: rgba(255, 252, 245, 0.92);
+        --ink: #1f2937;
+        --muted: #5f6b7a;
+        --line: rgba(31, 41, 55, 0.14);
+        --accent: #0f766e;
+        --accent-strong: #115e59;
+        --warn: #92400e;
+        --good: #166534;
+        --shadow: 0 24px 60px rgba(31, 41, 55, 0.12);
+        --esp-tools-button-color: #0f766e;
+        --esp-tools-button-text-color: #f8fafc;
+        --esp-tools-button-border-radius: 999px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Avenir Next", "PingFang SC", "Microsoft YaHei", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(15, 118, 110, 0.18), transparent 28%),
+          radial-gradient(circle at bottom right, rgba(180, 83, 9, 0.12), transparent 30%),
+          linear-gradient(135deg, #f7f2e8 0%, #ece7dd 100%);
+      }
+
+      .shell {
+        width: min(920px, calc(100% - 32px));
+        margin: 40px auto;
+        padding: 28px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 28px;
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(12px);
+      }
+
+      h1 {
+        margin: 0 0 10px;
+        font-size: clamp(28px, 5vw, 46px);
+        line-height: 1.02;
+        letter-spacing: -0.04em;
+      }
+
+      .lead {
+        margin: 0;
+        color: var(--muted);
+        font-size: 16px;
+        line-height: 1.7;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: 1.1fr 0.9fr;
+        gap: 20px;
+        margin-top: 26px;
+      }
+
+      .card {
+        padding: 22px;
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        background: rgba(255, 255, 255, 0.72);
+      }
+
+      .card h2 {
+        margin: 0 0 14px;
+        font-size: 18px;
+      }
+
+      .meta {
+        display: grid;
+        gap: 10px;
+      }
+
+      .row {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        padding-bottom: 10px;
+        border-bottom: 1px dashed rgba(31, 41, 55, 0.1);
+      }
+
+      .row:last-child {
+        padding-bottom: 0;
+        border-bottom: 0;
+      }
+
+      .key {
+        color: var(--muted);
+      }
+
+      .value {
+        text-align: right;
+        word-break: break-all;
+      }
+
+      .status {
+        margin-top: 18px;
+        padding: 14px 16px;
+        border-radius: 16px;
+        background: rgba(15, 118, 110, 0.08);
+        color: var(--good);
+      }
+
+      .status.warn {
+        background: rgba(180, 83, 9, 0.1);
+        color: var(--warn);
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 18px;
+      }
+
+      button,
+      a.button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 46px;
+        padding: 0 18px;
+        border: 0;
+        border-radius: 999px;
+        background: var(--accent);
+        color: #f8fafc;
+        font: inherit;
+        font-weight: 700;
+        text-decoration: none;
+        cursor: pointer;
+        transition: transform 120ms ease, background 120ms ease;
+      }
+
+      button:hover,
+      a.button:hover {
+        background: var(--accent-strong);
+        transform: translateY(-1px);
+      }
+
+      button.ghost,
+      a.button.ghost {
+        background: rgba(17, 24, 39, 0.08);
+        color: var(--ink);
+      }
+
+      code,
+      pre {
+        font-family: "SFMono-Regular", "JetBrains Mono", Menlo, monospace;
+      }
+
+      pre {
+        margin: 16px 0 0;
+        padding: 16px;
+        border-radius: 18px;
+        background: #17202a;
+        color: #d1fae5;
+        font-size: 13px;
+        line-height: 1.6;
+        overflow-x: auto;
+      }
+
+      .hint-list {
+        margin: 0;
+        padding-left: 18px;
+        color: var(--muted);
+        line-height: 1.8;
+      }
+
+      .hidden {
+        display: none;
+      }
+
+      @media (max-width: 760px) {
+        .shell {
+          width: min(100% - 20px, 920px);
+          margin: 12px auto;
+          padding: 18px;
+          border-radius: 22px;
+        }
+
+        .grid {
+          grid-template-columns: 1fr;
+        }
+
+        .row {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+
+        .value {
+          text-align: left;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <h1>MimiClaw 本地烧录页</h1>
+      <p class="lead">
+        这个页面会读取本机服务里的 <code>build/mimiclaw-merged.bin</code>，通过浏览器串口直接烧到
+        ESP32-S3。请用 Chrome / Edge 打开，并先关闭占用串口的 <code>idf.py monitor</code>、串口助手或 IDE。
+      </p>
+
+      <section class="grid">
+        <div class="card">
+          <h2>固件状态</h2>
+          <div class="meta">
+            <div class="row">
+              <div class="key">固件路径</div>
+              <div class="value" id="firmware-path">检查中…</div>
+            </div>
+            <div class="row">
+              <div class="key">版本</div>
+              <div class="value" id="firmware-version">检查中…</div>
+            </div>
+            <div class="row">
+              <div class="key">大小</div>
+              <div class="value" id="firmware-size">检查中…</div>
+            </div>
+            <div class="row">
+              <div class="key">下载地址</div>
+              <div class="value"><a id="download-link" href="#">等待中…</a></div>
+            </div>
+          </div>
+
+          <div class="status hidden" id="status-box"></div>
+
+          <div class="actions hidden" id="install-wrap">
+            <esp-web-install-button id="install-button">
+              <button slot="activate">连接设备并烧录</button>
+              <span slot="unsupported">当前浏览器不支持 Web Serial，请换 Chrome / Edge。</span>
+              <span slot="not-allowed">这个页面需要在安全上下文中打开，建议使用 http://127.0.0.1:8787/flasher。</span>
+            </esp-web-install-button>
+            <button class="ghost" id="reload-btn" type="button">刷新状态</button>
+          </div>
+
+          <div class="actions hidden" id="missing-wrap">
+            <button id="copy-build-btn" type="button">复制构建命令</button>
+            <button class="ghost" id="reload-missing-btn" type="button">重新检查</button>
+          </div>
+
+          <pre id="build-command">./scripts/build_merged_bin.sh</pre>
+        </div>
+
+        <div class="card">
+          <h2>使用提示</h2>
+          <ul class="hint-list">
+            <li>页面地址建议直接打开 <code>http://127.0.0.1:8787/flasher</code>。</li>
+            <li>首次点击按钮时，浏览器会弹串口选择框，你要选设备对应的 USB 串口。</li>
+            <li>如果板子有两个口，优先选原生 USB/JTAG 口。</li>
+            <li>烧录失败时，先断开其它串口程序，再重试。</li>
+            <li>这个页面烧的是整包镜像，适合首刷和分发，不是 OTA 升级页。</li>
+          </ul>
+          <pre>构建后端服务:
+cd bridge_service
+MIMI_BRIDGE_SKIP_FRPC=1 ./start.sh
+
+打开页面:
+http://127.0.0.1:8787/flasher</pre>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const firmwarePath = document.getElementById("firmware-path");
+      const firmwareVersion = document.getElementById("firmware-version");
+      const firmwareSize = document.getElementById("firmware-size");
+      const downloadLink = document.getElementById("download-link");
+      const statusBox = document.getElementById("status-box");
+      const installWrap = document.getElementById("install-wrap");
+      const missingWrap = document.getElementById("missing-wrap");
+      const installButton = document.getElementById("install-button");
+      const buildCommand = document.getElementById("build-command").textContent.trim();
+
+      function formatBytes(bytes) {
+        if (!bytes) return "0 B";
+        const units = ["B", "KB", "MB", "GB"];
+        let value = bytes;
+        let unit = 0;
+        while (value >= 1024 && unit < units.length - 1) {
+          value /= 1024;
+          unit += 1;
+        }
+        return `${value.toFixed(value >= 10 || unit === 0 ? 0 : 1)} ${units[unit]}`;
+      }
+
+      function showStatus(message, isWarn = false) {
+        statusBox.textContent = message;
+        statusBox.classList.remove("hidden", "warn");
+        if (isWarn) {
+          statusBox.classList.add("warn");
+        }
+      }
+
+      async function loadStatus() {
+        firmwarePath.textContent = "检查中…";
+        firmwareVersion.textContent = "检查中…";
+        firmwareSize.textContent = "检查中…";
+        downloadLink.textContent = "等待中…";
+        downloadLink.removeAttribute("href");
+        statusBox.classList.add("hidden");
+        installWrap.classList.add("hidden");
+        missingWrap.classList.add("hidden");
+
+        try {
+          const response = await fetch("/api/flasher/status", { cache: "no-store" });
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+          const status = await response.json();
+
+          firmwarePath.textContent = status.path || "-";
+          firmwareVersion.textContent = status.version || "-";
+          firmwareSize.textContent = formatBytes(status.size || 0);
+          downloadLink.textContent = status.download_url || "-";
+          if (status.download_url) {
+            downloadLink.href = status.download_url;
+          }
+
+          if (!status.exists) {
+            missingWrap.classList.remove("hidden");
+            showStatus("还没有找到 merged bin。先在仓库根目录执行 ./scripts/build_merged_bin.sh。", true);
+            return;
+          }
+
+          installButton.setAttribute("manifest", status.manifest_url);
+          installWrap.classList.remove("hidden");
+          showStatus("固件已就绪。点击“连接设备并烧录”即可开始。");
+        } catch (error) {
+          missingWrap.classList.remove("hidden");
+          showStatus(`读取状态失败：${error.message}`, true);
+        }
+      }
+
+      async function copyBuildCommand() {
+        try {
+          await navigator.clipboard.writeText(buildCommand);
+          showStatus("构建命令已复制到剪贴板。", false);
+        } catch (error) {
+          showStatus(`复制失败：${error.message}`, true);
+        }
+      }
+
+      document.getElementById("reload-btn").addEventListener("click", loadStatus);
+      document.getElementById("reload-missing-btn").addEventListener("click", loadStatus);
+      document.getElementById("copy-build-btn").addEventListener("click", copyBuildCommand);
+
+      loadStatus();
+    </script>
+  </body>
+</html>

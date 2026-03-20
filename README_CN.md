@@ -111,6 +111,29 @@ ls /dev/cu.usb*
 idf.py -p /dev/ttyACM0 flash monitor
 ```
 
+如果你要上传一个“用户只需整包烧录一次”的固件到云端分发，直接构建 merged bin：
+
+```bash
+./scripts/build_merged_bin.sh
+```
+
+默认输出：
+
+```text
+build/mimiclaw-merged.bin
+```
+
+用户下载后可直接整包烧录到 `0x0`：
+
+```bash
+esptool.py --chip esp32s3 -p /dev/ttyACM0 write_flash 0x0 build/mimiclaw-merged.bin
+```
+
+说明：
+- `build/mimiclaw.bin` 只是应用固件，适合 OTA，不是首刷整包。
+- `build/mimiclaw-merged.bin` 会把 bootloader、partition table、otadata、app、SPIFFS 一起合并，适合量产分发。
+- 当前工程实际 build 配置里的 flash size 是 `8MB`，merged bin 也会按这个容量生成；如果你改了分区表或 flash 容量，要重新构建整包。
+
 常见坑点：
 - 如果板子有两个 Type-C 口，烧录请使用原生 USB/JTAG 口。
 - 如果 `monitor` 里无法输入命令，切到 UART/COM 口重新打开串口监视。

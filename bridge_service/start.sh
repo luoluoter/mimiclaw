@@ -90,7 +90,6 @@ start_bridge() {
     return
   fi
 
-  : "${MIMI_BRIDGE_DISCORD_TOKEN:?MIMI_BRIDGE_DISCORD_TOKEN is required}"
   nohup "$VENV_DIR/bin/python" "$SCRIPT_DIR/app.py" > "$LOG_DIR/bridge.log" 2>&1 &
   echo $! > "$APP_PID_FILE"
   sleep 2
@@ -128,6 +127,11 @@ start_frpc() {
 
 prepare_python
 start_bridge
-start_frpc
+
+if [[ "${MIMI_BRIDGE_SKIP_FRPC:-0}" == "1" ]]; then
+  echo "skip frpc: MIMI_BRIDGE_SKIP_FRPC=1"
+else
+  start_frpc
+fi
 
 echo "done"

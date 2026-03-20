@@ -152,6 +152,37 @@ cd bridge_service
 - 首次运行会自动创建 `.venv`
 - `requirements.txt` 更新后会自动重新安装依赖
 
+## 8. 本地网页烧录
+
+如果你想在浏览器里点按钮烧录，而不是手敲 `esptool.py`，现在可以直接用本地 flasher 页面。
+
+先在仓库根目录构建整包固件：
+
+```bash
+./scripts/build_merged_bin.sh
+```
+
+再启动 bridge：
+
+```bash
+cd bridge_service
+MIMI_BRIDGE_SKIP_FRPC=1 ./start.sh
+```
+
+然后在 Chrome 或 Edge 打开：
+
+```text
+http://127.0.0.1:8787/flasher
+```
+
+说明：
+- 页面会读取 `build/mimiclaw-merged.bin`
+- 点击“连接设备并烧录”后，浏览器会弹出串口选择框
+- 如果你只是为了打开这个烧录页，可以不配置 `MIMI_BRIDGE_DISCORD_TOKEN`
+- 如果你只是本地烧录，不需要启动 `frpc`，直接用 `MIMI_BRIDGE_SKIP_FRPC=1 ./start.sh`
+- 如果页面提示找不到固件，先回仓库根目录执行 `./scripts/build_merged_bin.sh`
+- 如果烧录失败，先关闭 `idf.py monitor`、串口助手或 IDE 对串口的占用
+
 ### bridge 启动了但 Discord 不收消息
 
 通常检查这几项：

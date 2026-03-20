@@ -110,6 +110,29 @@ ls /dev/cu.usb*
 idf.py -p /dev/ttyACM0 flash monitor
 ```
 
+クラウド配布向けに、ユーザーが一度だけ丸ごと書き込める `merged bin` を作る場合は次を実行します：
+
+```bash
+./scripts/build_merged_bin.sh
+```
+
+デフォルトの出力先：
+
+```text
+build/mimiclaw-merged.bin
+```
+
+ユーザーはこのイメージを `0x0` にそのまま書き込めます：
+
+```bash
+esptool.py --chip esp32s3 -p /dev/ttyACM0 write_flash 0x0 build/mimiclaw-merged.bin
+```
+
+補足：
+- `build/mimiclaw.bin` は OTA 用のアプリイメージであり、初回書き込み用のフルイメージではありません。
+- `build/mimiclaw-merged.bin` には bootloader、partition table、otadata、app、SPIFFS が含まれます。
+- 現在のプロジェクト build 設定は `8MB` flash なので、merged image もこの容量に合わせて生成されます。
+
 よくある落とし穴：
 - Type-C ポートが 2 つある基板では、書き込みにはネイティブ USB/JTAG ポートを使ってください。
 - `monitor` でコマンド入力できない場合は、UART/COM ポートに切り替えて再度開いてください。

@@ -111,6 +111,29 @@ Flash and watch logs:
 idf.py -p /dev/ttyACM0 flash monitor
 ```
 
+If you want a single full-flash image for cloud distribution, build a merged bin:
+
+```bash
+./scripts/build_merged_bin.sh
+```
+
+Default output:
+
+```text
+build/mimiclaw-merged.bin
+```
+
+Users can then flash the full image at `0x0`:
+
+```bash
+esptool.py --chip esp32s3 -p /dev/ttyACM0 write_flash 0x0 build/mimiclaw-merged.bin
+```
+
+Notes:
+- `build/mimiclaw.bin` is the app image for OTA, not the first-flash full image.
+- `build/mimiclaw-merged.bin` includes bootloader, partition table, otadata, app, and SPIFFS.
+- The current project build is configured for `8MB` flash, and the merged image is generated against that size.
+
 Common pitfalls:
 - If your board has two Type-C ports, use the native USB/JTAG port for flashing.
 - If you cannot enter commands in `monitor`, switch to the UART/COM port and reopen the monitor.

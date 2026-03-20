@@ -6,11 +6,13 @@ import time
 from collections import deque
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Deque, Dict, List, Optional, Set
 
 import discord
 import uvicorn
 from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 
@@ -155,7 +157,8 @@ class BridgeRuntime:
     async def start_discord(self) -> None:
         token = os.getenv("MIMI_BRIDGE_DISCORD_TOKEN", "").strip()
         if not token:
-            raise RuntimeError("MIMI_BRIDGE_DISCORD_TOKEN is required")
+            logger.warning("MIMI_BRIDGE_DISCORD_TOKEN not set; Discord bridge disabled, web endpoints remain available")
+            return
 
         async def runner() -> None:
             await self.discord_client.start(token)
@@ -217,6 +220,26 @@ class DiscordBridgeClient(discord.Client):
 
 
 runtime = BridgeRuntime()
+APP_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = APP_DIR.parent
+FLASHER_HTML = APP_DIR / "static" / "flasher.html"
+MERGED_BIN = PROJECT_ROOT / "build" / "mimiclaw-merged.bin"
+
+
+def get_firmware_status() -> Dict[str, object]:
+    exists = MERGED_BIN.is_file()
+    size = MERGED_BIN.stat().st_size if exists else 0
+    mtime = int(MERGED_BIN.stat().st_mtime) if exists else 0
+    version = time.strftime("%Y.%m.%d-%H%M%S", time.localtime(mtime)) if exists else ""
+    return {
+        "exists": exists,
+        "path": str(MERGED_BIN),
+        "size": size,
+        "mtime": mtime,
+        "version": version,
+        "manifest_url": "/api/flasher/manifest.json",
+        "download_url": "/api/flasher/files/mimiclaw-merged.bin",
+    }
 
 
 @asynccontextmanager
@@ -246,6 +269,61 @@ async def healthz():
         "discord_ready": runtime.discord_client.is_ready(),
         "device_count": len(runtime.devices),
     }
+
+
+@app.get("/flasher")
+async def flasher_page():
+    if not FLASHER_HTML.is_file():
+        raise HTTPException(status_code=404, detail="flasher page not found")
+    return FileResponse(FLASHER_HTML, media_type="text/html; charset=utf-8")
+
+
+@app.get("/api/flasher/status")
+async def flasher_status():
+    return get_firmware_status()
+
+
+@app.get("/api/flasher/manifest.json")
+async def flasher_manifest():
+    status = get_firmware_status()
+    if not status["exists"]:
+        raise HTTPException(
+            status_code=404,
+            detail="merged firmware not found, run ./scripts/build_merged_bin.sh first",
+        )
+
+    manifest = {
+        "name": "MimiClaw",
+        "version": status["version"],
+        "new_install_prompt_erase": False,
+        "new_install_improv_wait_time": 0,
+        "builds": [
+            {
+                "chipFamily": "ESP32-S3",
+                "parts": [
+                    {
+                        "path": status["download_url"],
+                        "offset": 0,
+                    }
+                ],
+            }
+        ],
+    }
+    return JSONResponse(manifest)
+
+
+@app.get("/api/flasher/files/mimiclaw-merged.bin")
+async def flasher_firmware():
+    if not MERGED_BIN.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail="merged firmware not found, run ./scripts/build_merged_bin.sh first",
+        )
+    return FileResponse(
+        MERGED_BIN,
+        media_type="application/octet-stream",
+        filename="mimiclaw-merged.bin",
+    )
 
 
 @app.post("/api/v1/device/pull")
